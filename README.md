@@ -47,7 +47,13 @@ url = "https://mcp.context7.com/mcp"
 
 ### IBM Bob
 
-**One-line setup** (downloads guide files, configures MCP, installs all skills):
+**Conversational setup** — just ask Bob:
+
+> I plan to develop a Solid application. Please help me set up my environment as prescribed in https://github.com/jeswr/solid-ai-coding/
+
+Bob will handle everything automatically. See [BOB-SETUP-PROMPT.md](./BOB-SETUP-PROMPT.md) for details.
+
+**Or use the one-line script** (downloads guide files, configures MCP, installs all skills):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/jeswr/solid-ai-coding/main/setup-bob.sh | bash
