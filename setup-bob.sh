@@ -1,6 +1,17 @@
 #!/bin/bash
 set -e
 
+echo "⚠️  DEPRECATED: This bash script is deprecated in favor of setup-bob.js"
+echo "   The new Node.js script is faster, cross-platform, and fully parallelized."
+echo ""
+echo "   Please use instead:"
+echo "   curl -fsSL https://raw.githubusercontent.com/jeswr/solid-ai-coding/main/setup-bob.js | node"
+echo ""
+echo "   Continuing with legacy bash script in 5 seconds..."
+echo "   Press Ctrl+C to cancel and use the new script."
+echo ""
+sleep 5
+
 echo "🚀 Setting up Solid development environment for IBM Bob..."
 echo ""
 

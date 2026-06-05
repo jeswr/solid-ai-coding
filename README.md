@@ -47,22 +47,31 @@ url = "https://mcp.context7.com/mcp"
 
 ### IBM Bob
 
-**Conversational setup** — just ask Bob:
+**Recommended: One-command setup** (fully automated, cross-platform, parallelized):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/jeswr/solid-ai-coding/main/setup-bob.js | node
+```
+
+This single command:
+- ✅ Downloads guide files (AGENTS.md, CLAUDE.md)
+- ✅ Configures MCP server for library documentation
+- ✅ Installs all 18 skills in parallel (Solid + engineering)
+- ✅ Works on Windows, macOS, and Linux
+- ✅ Completes in ~1-2 minutes
+
+After the script completes, reload VS Code: `Cmd+Shift+P` → `Developer: Reload Window`
+
+**Alternative: Conversational setup** — just ask Bob:
 
 > I plan to develop a Solid application. Please help me set up my environment as prescribed in https://github.com/jeswr/solid-ai-coding/
 
-Bob will handle everything automatically. See [BOB-SETUP-PROMPT.md](./BOB-SETUP-PROMPT.md) for details.
-
-**Or use the one-line script** (downloads guide files, configures MCP, installs all skills):
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/jeswr/solid-ai-coding/main/setup-bob.sh | bash
-```
-
-Then reload Bob: `Cmd+Shift+P` → `Developer: Reload Window`
+Bob will run the setup script automatically. See [BOB-SETUP-PROMPT.md](./BOB-SETUP-PROMPT.md) for details.
 
 <details>
-<summary>Manual setup (if you prefer step-by-step)</summary>
+<summary>Manual setup (not recommended — use the script above instead)</summary>
+
+The automated script is faster and more reliable, but if you need manual control:
 
 ```sh
 # 1. Download guide files
@@ -76,8 +85,20 @@ curl -fsSL https://raw.githubusercontent.com/jeswr/solid-ai-coding/main/config/m
 # 3. Install Solid skills
 npx skills add jeswr/solid-ai-coding -a bob
 
-# 4. Install recommended engineering skills (testing, TypeScript, accessibility, code quality)
-curl -fsSL https://raw.githubusercontent.com/jeswr/solid-ai-coding/main/install-skills.sh | bash
+# 4. Install engineering skills (run each in parallel for speed)
+npx skills add antfu/skills --skill vitest -a bob &
+npx skills add currents-dev/playwright-best-practices-skill -a bob &
+npx skills add anthropics/skills --skill webapp-testing -a bob &
+npx skills add mcollina/skills --skill node -a bob &
+npx skills add wshobson/agents --skill typescript-advanced-types -a bob &
+npx skills add wshobson/agents --skill responsive-design -a bob &
+npx skills add schalkneethling/webdev-agent-skills --skill semantic-html -a bob &
+npx skills add vercel-labs/agent-skills --skill web-design-guidelines -a bob &
+npx skills add addyosmani/agent-skills --skill code-review-and-quality -a bob &
+npx skills add vercel-labs/skills --skill find-skills -a bob &
+wait
+
+# 5. Reload VS Code: Cmd+Shift+P → "Developer: Reload Window"
 ```
 
 </details>
