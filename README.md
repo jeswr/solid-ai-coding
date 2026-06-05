@@ -55,13 +55,16 @@ rules non-negotiable across all modes, also copy it to `.bob/rules/solid.md`
 ```json
 {
   "mcpServers": {
-    "context7": { "httpURL": "https://mcp.context7.com/mcp" }
+    "context7": {
+      "type": "streamable-http",
+      "url": "https://mcp.context7.com/mcp"
+    }
   }
 }
 ```
 
-(Bob uses `httpURL` for streamable-HTTP servers; its `url` key is legacy SSE and will not work
-with context7.)
+(`"type": "streamable-http"` is required — without it Bob treats `url` as a legacy SSE server
+and the context7 connection fails. Verified against a live Bob install, June 2026.)
 
 ### Other tools
 
