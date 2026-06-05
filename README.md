@@ -47,24 +47,34 @@ url = "https://mcp.context7.com/mcp"
 
 ### IBM Bob
 
-`AGENTS.md` at the repo root is auto-loaded into every conversation
-([docs](https://bob.ibm.com/docs/ide/getting-started/tutorials/start-a-project)). To make the
-rules non-negotiable across all modes, also copy it to `.bob/rules/solid.md`
-([rules docs](https://bob.ibm.com/docs/ide/configuration/rules)). Add context7 to `.bob/mcp.json`:
+**One-line setup** (downloads guide files, configures MCP, installs all skills):
 
-```json
-{
-  "mcpServers": {
-    "context7": {
-      "type": "streamable-http",
-      "url": "https://mcp.context7.com/mcp"
-    }
-  }
-}
+```sh
+curl -fsSL https://raw.githubusercontent.com/jeswr/solid-ai-coding/main/setup-bob.sh | bash
 ```
 
-(`"type": "streamable-http"` is required — without it Bob treats `url` as a legacy SSE server
-and the context7 connection fails. Verified against a live Bob install, June 2026.)
+Then reload Bob: `Cmd+Shift+P` → `Developer: Reload Window`
+
+<details>
+<summary>Manual setup (if you prefer step-by-step)</summary>
+
+```sh
+# 1. Download guide files
+curl -fsSLO https://raw.githubusercontent.com/jeswr/solid-ai-coding/main/AGENTS.md
+curl -fsSLO https://raw.githubusercontent.com/jeswr/solid-ai-coding/main/CLAUDE.md
+
+# 2. Configure MCP server
+mkdir -p .bob
+curl -fsSL https://raw.githubusercontent.com/jeswr/solid-ai-coding/main/config/mcp.json -o .bob/mcp.json
+
+# 3. Install Solid skills
+npx skills add jeswr/solid-ai-coding -a bob
+
+# 4. Install recommended engineering skills (testing, TypeScript, accessibility, code quality)
+curl -fsSL https://raw.githubusercontent.com/jeswr/solid-ai-coding/main/install-skills.sh | bash
+```
+
+</details>
 
 ### Other tools
 
@@ -77,7 +87,7 @@ This repo bundles seven [Agent Skills](https://agentskills.io/) under [`skills/`
 that go deeper than the guide — install them into your agent with:
 
 ```sh
-npx skills add jeswr/solid-ai-coding -a claude-code -a codex
+npx skills add jeswr/solid-ai-coding -a claude-code -a codex -a bob
 ```
 
 | Skill | Covers |
