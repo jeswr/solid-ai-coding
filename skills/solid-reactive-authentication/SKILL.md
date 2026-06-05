@@ -78,16 +78,32 @@ popup). Do not build your own token persistence, and prefer client-side navigati
 
 How should login *feel*? The reference behaviour comes from the Solid browser extension
 ([theodi/solid-browser-extension](https://github.com/theodi/solid-browser-extension)), which
-implements the same reactive model. A **tested reference implementation** of the non-UI parts is
-bundled with this skill — [`login-ux.ts`](./login-ux.ts) with its vitest suite
-[`login-ux.test.ts`](./login-ux.test.ts) (9 tests, run against the published packages):
-`validateWebId`, `resolveIssuers` (all issuers, `NoSolidIssuerError` when none),
-`fetchLoginCandidate` (WebID → issuers + display name + avatar in one read), and
-`RecentAccounts` (most-recent-first, deduplicated, corruption-safe, remembers the chosen issuer
-and storage per account). Copy it into `src/lib/` and build your UI on it. Note: in published
-0.1.2 the resolved issuer is used for validation and UI — the provider still resolves issuers
-internally from its host map; the chosen issuer becomes wired-in when the configurable issuer
-callback ships. The behaviour to implement:
+implements the same reactive model. Two layers of **tested reference code** are bundled with
+this skill:
+
+1. **[`webid-token-provider.ts`](./webid-token-provider.ts)** — `WebIdDPoPTokenProvider`, a
+   complete custom `TokenProvider` (a port of the published `DPoPTokenProvider` flow) whose
+   issuer comes from the user's WebID: `getWebId` callback (a native-`<dialog>` reference
+   implementation `promptWebIdDialog` is included) → profile dereference → `solid:oidcIssuer`
+   resolution → `chooseIssuer` when several (default **throws** `AmbiguousIssuerError`, never
+   silently first). Its `allowInsecureLoopback` option also makes **interactive login against
+   local CSS work** — the one thing the published provider cannot do. **E2E-verified**: a
+   headless Playwright run drives the full popup login (WebID dialog → CSS login → consent →
+   authenticated read) against a live local CSS, 3/3 stable — see
+   [`webid-token-provider.e2e.md`](./webid-token-provider.e2e.md) for the verification record.
+   ```ts
+   new ReactiveFetchManager([
+     new WebIdDPoPTokenProvider(callbackUri, ui.getCode.bind(ui), promptWebIdDialog,
+       { allowInsecureLoopback: true }),  // loopback-only; remote issuers stay HTTPS-strict
+   ]);
+   ```
+2. **[`login-ux.ts`](./login-ux.ts)** (vitest suite [`login-ux.test.ts`](./login-ux.test.ts),
+   9 tests) — the UX helpers the provider composes with: `validateWebId`, `resolveIssuers`,
+   `fetchLoginCandidate` (WebID → issuers + display name + avatar in one read), and
+   `RecentAccounts` (most-recent-first, deduplicated, corruption-safe, remembers the chosen
+   issuer and storage per account).
+
+Copy both into `src/lib/` and build your UI on them. The behaviour to implement:
 
 1. **WebID-first entry.** The login surface asks for one thing: the user's **WebID** (a URL
    input). No identity-provider dropdown, no server list — users know their WebID, not their
@@ -117,6 +133,6 @@ callback ships. The behaviour to implement:
 | Construct `ReactiveFetchManager` **once, early** | It patches the global; libraries that captured `fetch` earlier bypass auth |
 | Untyped `querySelector` fails to compile | The library doesn't augment `HTMLElementTagNameMap` — use `querySelector<AuthorizationCodeFlow>(…)` |
 | `Unknown issuer` | Host outside the 0.1.2 built-in map — see above |
-| `only requests to HTTPS are allowed` on local login | The 0.1.2 HTTP-issuer wall — see above; interactive login needs an HTTPS issuer |
+| `only requests to HTTPS are allowed` on local login | The 0.1.2 HTTP-issuer wall — use the bundled `WebIdDPoPTokenProvider` with `allowInsecureLoopback: true` for local CSS |
 | CSS-only auth failure `iat is not recent enough` | A *second* auth layer sending ms-unit DPoP `iat`; this library is correct — remove the other layer |
 | Worker mode | `ReactiveFetchWorkerManager` registers a repo-relative worker path; treat as not production-ready in 0.1.x |
