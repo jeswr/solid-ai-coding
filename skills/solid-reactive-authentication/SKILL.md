@@ -74,13 +74,20 @@ Tokens live **in memory only**. A hard reload drops them; the next `401` re-runs
 popup). Do not build your own token persistence, and prefer client-side navigation so the page
 (and its tokens) survive between views.
 
-## Letting users pick their Solid server — behaviour specification
+## Letting users pick their Solid server — behaviour spec + tested code
 
 How should login *feel*? The reference behaviour comes from the Solid browser extension
 ([theodi/solid-browser-extension](https://github.com/theodi/solid-browser-extension)), which
-implements the same reactive model. Implement this UX in your app's own UI (no library-specific
-code prescribed — the published library resolves issuers internally today; wire your issuer
-choice in when the configurable callback ships):
+implements the same reactive model. A **tested reference implementation** of the non-UI parts is
+bundled with this skill — [`login-ux.ts`](./login-ux.ts) with its vitest suite
+[`login-ux.test.ts`](./login-ux.test.ts) (9 tests, run against the published packages):
+`validateWebId`, `resolveIssuers` (all issuers, `NoSolidIssuerError` when none),
+`fetchLoginCandidate` (WebID → issuers + display name + avatar in one read), and
+`RecentAccounts` (most-recent-first, deduplicated, corruption-safe, remembers the chosen issuer
+and storage per account). Copy it into `src/lib/` and build your UI on it. Note: in published
+0.1.2 the resolved issuer is used for validation and UI — the provider still resolves issuers
+internally from its host map; the chosen issuer becomes wired-in when the configurable issuer
+callback ships. The behaviour to implement:
 
 1. **WebID-first entry.** The login surface asks for one thing: the user's **WebID** (a URL
    input). No identity-provider dropdown, no server list — users know their WebID, not their
