@@ -49,6 +49,24 @@ export type ChooseIssuerCallback = (issuers: string[]) => Promise<string>;
 
 export interface WebIdDPoPTokenProviderOptions {
   /**
+   * A **Solid-OIDC Client Identifier Document** URL. When set, the provider
+   * SKIPS dynamic client registration and authenticates as a public client whose
+   * `client_id` IS this URL (the spec's "Client Identifier" — a dereferenceable
+   * JSON-LD document; see https://solidproject.org/TR/oidc#clientids). The OP
+   * dereferences the URL and matches the redirect_uri against the document's
+   * `redirect_uris`, so the document MUST list the {@link callbackUri} passed to
+   * the constructor. With `none` token-endpoint auth (a public browser client),
+   * no client secret is involved.
+   *
+   * The URL string MUST equal the document's `client_id` field byte-for-byte;
+   * a trailing-slash or scheme/port mismatch makes the OP reject it.
+   *
+   * When ABSENT (default), the provider falls back to **dynamic client
+   * registration** — convenient for local dev, but yields a throwaway client
+   * with no stable name on the consent screen.
+   */
+  clientId?: string;
+  /**
    * Pick one issuer when the profile advertises several. Defaults to a policy
    * that throws on ambiguity (see {@link AmbiguousIssuerError}). It is always
    * called with ≥ 1 issuer; with exactly one, the default returns it.
@@ -107,6 +125,7 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
   readonly #callbackUri: string;
   readonly #getCode: GetCodeCallback;
   readonly #getWebId: GetWebIdCallback;
+  readonly #clientId?: string;
   readonly #chooseIssuer?: ChooseIssuerCallback;
   readonly #allowInsecureLoopback: boolean;
   /**
@@ -131,6 +150,7 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     this.#callbackUri = callbackUri;
     this.#getCode = getCode;
     this.#getWebId = getWebId;
+    this.#clientId = options.clientId;
     this.#chooseIssuer = options.chooseIssuer;
     this.#allowInsecureLoopback = options.allowInsecureLoopback ?? false;
     this.#profileFetch =
@@ -196,10 +216,12 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
   }
 
   /**
-   * The published DPoPTokenProvider flow, verbatim except for the insecure-loopback
-   * option threaded through every oauth4webapi call: discovery → dynamic client
-   * registration → PKCE/DPoP authorization-code grant, with the `prompt=none`
-   * silent retry preserved.
+   * The published DPoPTokenProvider flow, verbatim except for two changes
+   * threaded through: the insecure-loopback option on every oauth4webapi call,
+   * and a STATIC-vs-DYNAMIC client branch. Flow: discovery → client identity
+   * (static Client Identifier Document when {@link WebIdDPoPTokenProviderOptions.clientId}
+   * is set, else dynamic client registration) → PKCE/DPoP authorization-code
+   * grant, with the `prompt=none` silent retry preserved.
    */
   async #authenticate(issuer: URL, signal: AbortSignal): Promise<IssuerSession> {
     const http = this.#httpOptions(issuer, signal);
@@ -210,13 +232,10 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       discoveryResponse,
     );
 
-    const registrationResponse = await oauth.dynamicClientRegistrationRequest(
+    const clientRegistration = await this.#resolveClient(
       authorizationServer,
-      { redirect_uris: [this.#callbackUri] },
       http,
     );
-    const clientRegistration =
-      await oauth.processDynamicClientRegistrationResponse(registrationResponse);
 
     const [registeredRedirectUri] = clientRegistration.redirect_uris as
       | string[]
@@ -321,6 +340,43 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       dpopKey,
       accessToken: tokenResult.access_token,
     };
+  }
+
+  /**
+   * Resolve the OAuth client used for this issuer.
+   *
+   * - **Static (a Client Identifier Document):** when `clientId` is set, return a
+   *   public {@link oauth.Client} whose `client_id` IS that URL, with
+   *   `token_endpoint_auth_method: "none"`. No network call is made here — the OP
+   *   dereferences the document itself at the authorization/token endpoints and
+   *   matches the redirect_uri against the document's `redirect_uris`. The
+   *   document must therefore list this provider's `callbackUri`. `redirect_uris`
+   *   and `response_types` are seeded locally so the shared URL-building code
+   *   below has the values it needs.
+   * - **Dynamic (the default):** dynamic client registration, exactly as the
+   *   published provider does — a throwaway client per session, no stable name.
+   */
+  async #resolveClient(
+    authorizationServer: oauth.AuthorizationServer,
+    http: { signal: AbortSignal; [oauth.allowInsecureRequests]?: true },
+  ): Promise<oauth.Client> {
+    if (this.#clientId !== undefined) {
+      // A public browser client identified by a dereferenceable URL. `oauth.Client`
+      // requires only `client_id`; the rest are accepted via its index signature
+      // and consumed by the shared authorization-URL builder below.
+      return {
+        client_id: this.#clientId,
+        token_endpoint_auth_method: "none",
+        redirect_uris: [this.#callbackUri],
+        response_types: ["code"],
+      };
+    }
+    const registrationResponse = await oauth.dynamicClientRegistrationRequest(
+      authorizationServer,
+      { redirect_uris: [this.#callbackUri] },
+      http,
+    );
+    return oauth.processDynamicClientRegistrationResponse(registrationResponse);
   }
 
   /** Client authentication, mirroring the published provider's ESS workaround. */

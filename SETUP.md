@@ -132,7 +132,7 @@ The script is tested on every push via GitHub Actions:
 - **Tests:**
   - File downloads complete successfully
   - MCP config is valid JSON with correct content
-  - All 18 skills are installed
+  - The full recommended skill set is installed (Solid bundle + 14 engineering/design skills)
   - Script is idempotent (can run twice)
 
 See [`.github/workflows/test-setup.yml`](.github/workflows/test-setup.yml) for details.

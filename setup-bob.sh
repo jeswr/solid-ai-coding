@@ -51,7 +51,8 @@ install_skill() {
 
 # Install Solid-specific skills
 echo "Installing Solid skills..."
-install_skill "jeswr/solid-ai-coding" "" "Solid AI Coding (8 skills)" &
+install_skill "jeswr/solid-ai-coding" "" "Solid AI Coding (skill bundle)" &
+install_skill "obra/superpowers" "test-driven-development" "Test-driven development" &
 
 # Install engineering skills in parallel
 echo "Installing engineering skills..."
@@ -63,6 +64,9 @@ install_skill "wshobson/agents" "typescript-advanced-types" "TypeScript advanced
 install_skill "wshobson/agents" "responsive-design" "Responsive design" &
 install_skill "schalkneethling/webdev-agent-skills" "semantic-html" "Semantic HTML" &
 install_skill "vercel-labs/agent-skills" "web-design-guidelines" "Web design guidelines" &
+install_skill "emilkowalski/skill" "emil-design-eng" "UI polish (emil-design-eng)" &
+install_skill "wondelai/skills" "web-typography" "Web typography" &
+install_skill "dembrandt/dembrandt-skills" "color-mode-and-theme" "Colour mode and theme" &
 install_skill "addyosmani/agent-skills" "code-review-and-quality" "Code review and quality" &
 install_skill "vercel-labs/skills" "find-skills" "find-skills" &
 

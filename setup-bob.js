@@ -116,9 +116,10 @@ async function main() {
     downloadAndSaveFile(`${REPO_BASE}/config/mcp.json`, join('.bob', 'mcp.json'), 'MCP config'),
     
     // Install Solid skills
-    installSkill('jeswr/solid-ai-coding', null, 'Solid AI Coding (8 skills)'),
+    installSkill('jeswr/solid-ai-coding', null, 'Solid AI Coding (skill bundle)'),
     
-    // Install engineering skills
+    // Install engineering + design skills (AGENTS.md §Recommended skills is canonical)
+    installSkill('obra/superpowers', 'test-driven-development', 'Test-driven development'),
     installSkill('antfu/skills', 'vitest', 'vitest'),
     installSkill('currents-dev/playwright-best-practices-skill', null, 'Playwright best practices'),
     installSkill('anthropics/skills', 'webapp-testing', 'webapp-testing'),
@@ -127,6 +128,9 @@ async function main() {
     installSkill('wshobson/agents', 'responsive-design', 'Responsive design'),
     installSkill('schalkneethling/webdev-agent-skills', 'semantic-html', 'Semantic HTML'),
     installSkill('vercel-labs/agent-skills', 'web-design-guidelines', 'Web design guidelines'),
+    installSkill('emilkowalski/skill', 'emil-design-eng', 'UI polish (emil-design-eng)'),
+    installSkill('wondelai/skills', 'web-typography', 'Web typography'),
+    installSkill('dembrandt/dembrandt-skills', 'color-mode-and-theme', 'Colour mode and theme'),
     installSkill('addyosmani/agent-skills', 'code-review-and-quality', 'Code review and quality'),
     installSkill('vercel-labs/skills', 'find-skills', 'find-skills'),
   ];
@@ -142,8 +146,8 @@ async function main() {
     log('📋', 'What was installed:');
     log('', '   • AGENTS.md and CLAUDE.md guide files');
     log('', '   • MCP server configuration (.bob/mcp.json)');
-    log('', '   • 8 Solid-specific skills');
-    log('', '   • 10 engineering skills (testing, TypeScript, accessibility, code quality)');
+    log('', '   • the full Solid skill bundle (jeswr/solid-ai-coding)');
+    log('', '   • 14 engineering + design skills (TDD, testing, TypeScript, accessibility, UI quality)');
     console.log('');
 
     log('🎉', 'Setup complete! Your Solid development environment is ready.');

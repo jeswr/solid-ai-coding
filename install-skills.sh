@@ -18,6 +18,7 @@ echo "🔧 Installing Solid-specific skills..."
 npx skills add jeswr/solid-ai-coding -a bob
 
 echo "🧪 Installing testing and quality skills..."
+npx skills add obra/superpowers --skill test-driven-development -a bob
 npx skills add antfu/skills --skill vitest -a bob
 npx skills add currents-dev/playwright-best-practices-skill -a bob
 npx skills add anthropics/skills --skill webapp-testing -a bob
@@ -29,6 +30,9 @@ npx skills add wshobson/agents --skill typescript-advanced-types --skill respons
 echo "🌐 Installing web development skills..."
 npx skills add schalkneethling/webdev-agent-skills --skill semantic-html -a bob
 npx skills add vercel-labs/agent-skills --skill web-design-guidelines -a bob
+npx skills add emilkowalski/skill --skill emil-design-eng -a bob
+npx skills add wondelai/skills --skill web-typography -a bob
+npx skills add dembrandt/dembrandt-skills --skill color-mode-and-theme -a bob
 
 echo "✨ Installing code quality skills..."
 npx skills add addyosmani/agent-skills --skill code-review-and-quality -a bob

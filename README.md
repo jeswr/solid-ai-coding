@@ -56,7 +56,7 @@ curl -fsSL https://raw.githubusercontent.com/jeswr/solid-ai-coding/main/setup-bo
 This single command:
 - ✅ Downloads guide files (AGENTS.md, CLAUDE.md)
 - ✅ Configures MCP server for library documentation
-- ✅ Installs all 18 skills in parallel (Solid + engineering)
+- ✅ Installs the full recommended skill set in parallel (the Solid bundle + 14 engineering/design skills incl. TDD and UI quality)
 - ✅ Works on Windows, macOS, and Linux
 - ✅ Completes in ~1-2 minutes
 
@@ -86,6 +86,7 @@ curl -fsSL https://raw.githubusercontent.com/jeswr/solid-ai-coding/main/config/m
 npx skills add jeswr/solid-ai-coding -a bob
 
 # 4. Install engineering skills (run each in parallel for speed)
+npx skills add obra/superpowers --skill test-driven-development -a bob &
 npx skills add antfu/skills --skill vitest -a bob &
 npx skills add currents-dev/playwright-best-practices-skill -a bob &
 npx skills add anthropics/skills --skill webapp-testing -a bob &
@@ -94,6 +95,9 @@ npx skills add wshobson/agents --skill typescript-advanced-types -a bob &
 npx skills add wshobson/agents --skill responsive-design -a bob &
 npx skills add schalkneethling/webdev-agent-skills --skill semantic-html -a bob &
 npx skills add vercel-labs/agent-skills --skill web-design-guidelines -a bob &
+npx skills add emilkowalski/skill --skill emil-design-eng -a bob &
+npx skills add wondelai/skills --skill web-typography -a bob &
+npx skills add dembrandt/dembrandt-skills --skill color-mode-and-theme -a bob &
 npx skills add addyosmani/agent-skills --skill code-review-and-quality -a bob &
 npx skills add vercel-labs/skills --skill find-skills -a bob &
 wait
@@ -110,7 +114,7 @@ Cursor, Zed, Windsurf, Gemini CLI, GitHub Copilot coding agent, Devin, and a gro
 
 ## Solid skills
 
-This repo bundles eight [Agent Skills](https://agentskills.io/) under [`skills/`](./skills/)
+This repo bundles nine [Agent Skills](https://agentskills.io/) under [`skills/`](./skills/)
 that go deeper than the guide — install them into your agent with:
 
 ```sh
@@ -126,6 +130,7 @@ npx skills add jeswr/solid-ai-coding -a claude-code -a codex -a bob
 | [`solid-type-index`](./skills/solid-type-index/SKILL.md) | Reading, writing, and bootstrapping Type Index registries (with a compile-verified wrapper implementation) |
 | [`solid-scale-and-sharding`](./skills/solid-scale-and-sharding/SKILL.md) | Collection data without hitting the walls — sharding, index resources, client-side querying |
 | [`solid-notifications`](./skills/solid-notifications/SKILL.md) | Live-sync via the Solid Notifications Protocol and the legacy NSS channel |
+| [`solid-test-infrastructure`](./skills/solid-test-infrastructure/SKILL.md) | Verified test harness (Playwright + local CSS, account seeding, client-credentials fixtures) + the `dev.mjs` seeded dev environment |
 | [`accessible-html-links`](./skills/accessible-html-links/SKILL.md) | Native `<a href>` + WCAG link-purpose rules (derived from Solid-website review feedback) |
 
 The guide's Part 2 also names a **default set of third-party engineering skills** (vitest,

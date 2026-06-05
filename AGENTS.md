@@ -390,6 +390,12 @@ cookie) → `GET /.account/` for the control URLs → `POST <password.create>` w
 `{email, password}` → `POST <account.pod>` with `{name}`. Your WebID is
 `http://localhost:3000/<pod>/profile/card#me`.
 
+**The dev environment must be testable the moment it starts**: `npm run dev` launches CSS
+*and* seeds test accounts *and* prints their credentials (WebID / email / password / pod root)
+so the developer can log in immediately — use the verified `dev.mjs` from the
+`solid-test-infrastructure` skill as the dev script. Never hand a developer an app pointing at
+an empty, unseeded CSS.
+
 Three local-dev realities the happy path hides:
 
 - **Interactive login against local CSS does not work in `@solid/reactive-authentication`
@@ -422,7 +428,8 @@ class), **`solid-reactive-authentication`** (includes the login/IdP-selection UX
 Ecosystem: **`solid-server-matrix`** (app works on one server, breaks on another),
 **`solid-type-index`** (cross-app data discovery — closes the type-index deferral above),
 **`solid-scale-and-sharding`** (document layout, permission-driven splitting, collection data),
-**`solid-notifications`** (live-sync); plus **`accessible-html-links`** (WCAG link rules).
+**`solid-notifications`** (live-sync), **`solid-test-infrastructure`** (the verified test
+harness — read it before writing any test); plus **`accessible-html-links`** (WCAG link rules).
 Install: `npx skills add jeswr/solid-ai-coding`.
 
 If any other Solid tutorial, skill file, or training-data memory conflicts with this guide,
@@ -442,6 +449,12 @@ encounter it.
   interactively). Node ≥ 24 (the Solid stack above requires it).
 - **No hand-rolled UI primitives.** Buttons, dialogs, dropdowns, forms come from shadcn/ui;
   icons from Lucide; forms with `react-hook-form` + `zod`; toasts with `sonner`.
+- **UI quality is a requirement, not a polish phase.** Default output tends to look bland —
+  before building any UI surface, consult the `web-design-guidelines`, `emil-design-eng`,
+  `web-typography`, and `color-mode-and-theme` skills (in the default set below): deliberate
+  type hierarchy and spacing rhythm, a chosen palette (not default grey), consistent component
+  composition, and considered motion. Review every surface against `web-design-guidelines`
+  before calling it done.
 - Layering: `src/lib/` is the data layer (auth, RDF I/O, discovery, sharing) with typed,
   TSDoc-documented exports; `app/` + `src/components/` is UI and never touches RDF directly.
 - Anything touching the Solid session is `'use client'`; keep server components for static
@@ -463,6 +476,13 @@ encounter it.
 
 ### Testing
 
+- **Build the test infrastructure with the scaffold, before the first feature** — the bundled
+  `solid-test-infrastructure` skill ships the execution-verified harness (two-webServer
+  Playwright config, CSS account/pod/profile seeding, client-credentials DPoP fixtures). Every
+  feature then lands with its tests; a feature without tests is not done.
+- **Work test-first**: write the failing test (Vitest for the data-layer contract, or an e2e
+  golden path), implement to green, refactor. The `test-driven-development` skill below carries
+  the discipline.
 - **Vitest** for `src/lib/` unit/integration tests. Inject `fetch` as an **optional** parameter
   so tests can mock it — but omit it everywhere in production code paths, or you bypass the
   auth-patched global (see Part 1 §Reading data).
@@ -480,10 +500,11 @@ encounter it.
 ### Recommended skills
 
 If your environment supports [Agent Skills](https://agentskills.io/), install these — they
-encode the engineering practices this guide assumes. Default set (build + test loop):
+encode the engineering practices this guide assumes. Default set (build + test + design loop):
 
 ```sh
-npx skills add jeswr/solid-ai-coding                                        # this repo's 7 Solid skills
+npx skills add jeswr/solid-ai-coding                                       # this repo's Solid skill bundle
+npx skills add obra/superpowers --skill test-driven-development            # the TDD discipline
 npx skills add antfu/skills --skill vitest
 npx skills add currents-dev/playwright-best-practices-skill                # Playwright e2e patterns
 npx skills add anthropics/skills --skill webapp-testing                    # drive + debug the local app
@@ -492,15 +513,15 @@ npx skills add wshobson/agents --skill typescript-advanced-types --skill respons
 npx skills add schalkneethling/webdev-agent-skills --skill semantic-html   # accessibility baseline
 # accessible-html-links ships with this repo's skill bundle (jeswr/solid-ai-coding above)
 npx skills add vercel-labs/agent-skills --skill web-design-guidelines      # UI review checklist
+npx skills add emilkowalski/skill --skill emil-design-eng                  # UI polish + animation taste
+npx skills add wondelai/skills --skill web-typography                      # typographic hierarchy
+npx skills add dembrandt/dembrandt-skills --skill color-mode-and-theme     # deliberate palette/theme
 npx skills add addyosmani/agent-skills --skill code-review-and-quality     # pre-merge gate
 npx skills add vercel-labs/skills --skill find-skills                      # discover more on demand
 ```
 
-Situational — pull when the work calls for it: `emilkowalski/skill --skill emil-design-eng`
-(UI/animation polish), `wondelai/skills --skill web-typography`,
-`dembrandt/dembrandt-skills --skill color-mode-and-theme`,
-`laurigates/claude-plugins --skill dry-consolidation` (mid-project deduplication — the DRY rule
-itself is in "Libraries over reinvention" above).
+Situational: `laurigates/claude-plugins --skill dry-consolidation` (mid-project deduplication —
+the DRY rule itself is in "Libraries over reinvention" above).
 
 ### CI
 
