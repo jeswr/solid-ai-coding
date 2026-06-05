@@ -70,14 +70,23 @@ Cursor, Zed, Windsurf, Gemini CLI, GitHub Copilot coding agent, Devin, and a gro
 
 ## Solid skills
 
-Reusable Solid skill files live at
-[`solid-contrib/llm-skills`](https://github.com/solid-contrib/llm-skills). Once that repo's
-restructure to the [Agent Skills](https://agentskills.io/) format (`SKILL.md`) lands, install
-them into your agent with:
+This repo bundles four [Agent Skills](https://agentskills.io/) under [`skills/`](./skills/)
+that go deeper than the guide — install them into your agent with:
 
 ```sh
-npx skills add solid-contrib/llm-skills -a claude-code -a codex
+npx skills add jeswr/solid-ai-coding -a claude-code -a codex
 ```
+
+| Skill | Covers |
+|---|---|
+| [`solid-server-matrix`](./skills/solid-server-matrix/SKILL.md) | Diagnosing CSS / ESS / NSS differences when an app works on one server and breaks on another |
+| [`solid-type-index`](./skills/solid-type-index/SKILL.md) | Reading, writing, and bootstrapping Type Index registries (with a compile-verified wrapper implementation) |
+| [`solid-scale-and-sharding`](./skills/solid-scale-and-sharding/SKILL.md) | Collection data without hitting the walls — sharding, index resources, client-side querying |
+| [`solid-notifications`](./skills/solid-notifications/SKILL.md) | Live-sync via the Solid Notifications Protocol and the legacy NSS channel |
+
+More Solid skill files live at
+[`solid-contrib/llm-skills`](https://github.com/solid-contrib/llm-skills) (currently being
+restructured to the Agent Skills format; these four are candidates to graduate there).
 
 ## Contributing
 
