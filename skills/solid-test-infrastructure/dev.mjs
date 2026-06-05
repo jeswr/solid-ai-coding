@@ -142,7 +142,9 @@ for (const account of ACCOUNTS) {
       });
     } else {
       console.error(`✗ seeding ${account.pod} failed and the pod is not usable: ${e.message}`);
-      process.exitCode = 1;
+      console.error("  The environment is NOT ready — fix the error above and re-run.");
+      children.forEach((c) => c.kill());
+      process.exit(1); // never print credentials or start the app on a broken seed
     }
   }
 }

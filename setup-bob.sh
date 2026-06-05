@@ -24,7 +24,7 @@ for pid in $(jobs -p); do
   if ! wait "$pid"; then FAILED=1; fi
 done
 if [ "$FAILED" -ne 0 ]; then
-  echo "✗ One or more skill installations failed — re-run this script or install manually (see README)."
+  echo "✗ Guide file download failed — check your network and re-run this script."
   exit 1
 fi
 echo "✅ Guide files downloaded"
@@ -48,9 +48,9 @@ install_skill() {
     local name=$3
     
     if [ -n "$skill" ]; then
-        npx skills add "$repo" --skill "$skill" -a bob > /dev/null 2>&1
+        npx skills add "$repo" --skill "$skill" -a bob > /dev/null 2>&1 || { echo "  ✗ $name"; return 1; }
     else
-        npx skills add "$repo" -a bob > /dev/null 2>&1
+        npx skills add "$repo" -a bob > /dev/null 2>&1 || { echo "  ✗ $name"; return 1; }
     fi
     
     echo "  ✓ $name"
@@ -77,8 +77,16 @@ install_skill "dembrandt/dembrandt-skills" "color-mode-and-theme" "Colour mode a
 install_skill "addyosmani/agent-skills" "code-review-and-quality" "Code review and quality" &
 install_skill "vercel-labs/skills" "find-skills" "find-skills" &
 
-# Wait for all background jobs to complete
-wait
+# Wait for every install job individually so failures are not swallowed
+SKILLS_FAILED=0
+for pid in $(jobs -p); do
+  if ! wait "$pid"; then SKILLS_FAILED=1; fi
+done
+if [ "$SKILLS_FAILED" -ne 0 ]; then
+  echo ""
+  echo "✗ One or more skill installations failed — re-run this script or install manually (see README)."
+  exit 1
+fi
 
 echo ""
 echo "✅ All skills installed successfully!"
@@ -108,8 +116,8 @@ echo ""
 echo "📋 What was installed:"
 echo "   • AGENTS.md and CLAUDE.md guide files"
 echo "   • MCP server configuration (.bob/mcp.json)"
-echo "   • 8 Solid-specific skills"
-echo "   • 10 engineering skills (testing, TypeScript, accessibility, code quality)"
+echo "   • the full Solid skill bundle (jeswr/solid-ai-coding)"
+echo "   • 14 engineering + design skills (TDD, testing, TypeScript, accessibility, UI quality)"
 echo ""
 echo "🚀 You can now start building your Solid application!"
 

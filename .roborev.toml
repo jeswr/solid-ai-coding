@@ -1,0 +1,2 @@
+# roborev — reviewer must be a different provider from the development model
+agent = "codex"

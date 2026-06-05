@@ -147,6 +147,13 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
   #issuer?: Promise<URL>;
   /** Single-flight session per issuer: parallel 401s share one login flow. */
   readonly #sessions = new Map<string, Promise<IssuerSession>>();
+  /**
+   * Shared auth work (issuer resolution, login) is provider-owned: it must NOT
+   * be tied to any single request's AbortSignal, or aborting one request would
+   * cancel the login other concurrent 401 upgrades are waiting on. The user
+   * cancels via the dialog/popup themselves, which rejects the shared promise.
+   */
+  readonly #authSignal = new AbortController().signal;
 
   constructor(
     callbackUri: string,
@@ -196,12 +203,12 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
   }
 
   async upgrade(request: Request): Promise<Request> {
-    this.#issuer ??= this.#resolveIssuer(request.signal).catch((e) => {
+    this.#issuer ??= this.#resolveIssuer(this.#authSignal).catch((e) => {
       this.#issuer = undefined; // allow retry after cancel/failure
       throw e;
     });
     const issuer = await this.#issuer;
-    const session = await this.#getSession(issuer, request.signal);
+    const session = await this.#getSession(issuer, this.#authSignal);
     const headers = new Headers(request.headers);
     headers.set(
       "DPoP",
