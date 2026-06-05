@@ -341,25 +341,14 @@ some servers and surfaces as an unexplainable `403`.
 
 ### Data modelling — FAIR vocabulary use
 
-**Apply the FAIR principles** (Findable, Accessible, Interoperable, Reusable) to every term in
-your model. Before modelling anything, read
-[`docs/data-modelling.md`](./docs/data-modelling.md)
+**Before modelling anything, read [`docs/data-modelling.md`](./docs/data-modelling.md)**
 ([raw](https://raw.githubusercontent.com/jeswr/solid-ai-coding/main/docs/data-modelling.md) if
-you only copied this file) — it carries the discovery tooling (verified API calls), the
-vocabulary selection ladder, and the full anti-pattern table. The non-negotiable rules:
-
-1. **Interoperate with deployed Solid apps first.** For data other apps commonly read and write
-   — profiles, preferences, contacts, chat, bookmarks — model it the way the ecosystem already
-   does: survey [solidproject.org/apps](https://solidproject.org/apps), and reuse the domain
-   shapes in the [Solid SHACL Shapes Catalogue](https://github.com/solid/shapes) (`chat.ttl`,
-   `bookmark.ttl`, `address_book.ttl`, …) rather than inventing a parallel model.
-2. **Reuse a published term before minting one** — run the doc's discovery chain
-   (prefix.cc → dereference the term IRI → check LOV reuse); a term that 404s is banned.
-3. **Never mint IRIs at domains you don't control or that don't resolve.** Blank nodes or
-   real, dereferenceable URLs. WebIDs are `https:` only.
-4. **One canonical scheme per namespace**, **no `authorId`-style string properties standing in
-   for links**, type every resource, validate with SHACL — details and the full table in the doc.
-5. Solid resources are Turtle (`text/turtle`) or JSON-LD (`application/ld+json`). Nothing else.
+you only copied this file) — it is the authority for this topic: interop-first modelling
+(deployed apps + the shapes catalogue), the term-discovery chain, the vocabulary selection
+ladder, FAIR applied, SHACL validation, and the anti-pattern table. Non-negotiables it expands
+on: apply the FAIR principles to every term; interoperate with deployed apps before designing
+your own model; never mint IRIs at domains you don't control or that don't resolve; resources
+are Turtle or JSON-LD only.
 
 ### Servers — develop, test, release
 
@@ -495,6 +484,7 @@ npx skills add anthropics/skills --skill webapp-testing                    # dri
 npx skills add mcollina/skills --skill node                                # Node.js best practices
 npx skills add wshobson/agents --skill typescript-advanced-types --skill responsive-design
 npx skills add schalkneethling/webdev-agent-skills --skill semantic-html   # accessibility baseline
+# accessible-html-links ships with this repo's skill bundle (jeswr/solid-ai-coding above)
 npx skills add vercel-labs/agent-skills --skill web-design-guidelines      # UI review checklist
 npx skills add addyosmani/agent-skills --skill code-review-and-quality     # pre-merge gate
 npx skills add vercel-labs/skills --skill find-skills                      # discover more on demand

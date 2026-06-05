@@ -45,24 +45,27 @@ self-hostable implementations** — CSS, ESS,
 characterises the three you will meet at a hackathon (CSS / ESS / NSS); treat the other three
 as "detect at runtime" (next section).
 
-### Hosted providers (per get-a-pod, June 2026)
+### Hosted providers (get-a-pod, June 2026 × [solid/catalog](https://github.com/solid/catalog) `catalog-data.ttl`)
 
-| Provider | Operator | Region | Implementation |
+| Provider | Operator | Region | Implementation (per catalog) |
 |---|---|---|---|
-| `solidcommunity.net` | Solid Project | UK | CSS (hosted) — *community knowledge, unverified on-page* |
-| Inrupt Pod Spaces (`storage.inrupt.com`) | Inrupt | US, EU, APAC | ESS |
-| `*.inrupt.net` | Inrupt | — | NSS (legacy) — *community knowledge* |
-| Data Pod (`datapod.igrant.io`) | iGrant.io | EU | *not stated* |
-| `redpencil.io` | redpencil.io | EU | *not stated* |
-| `solidcommunity.au` | Solid Community AU | Australia | *not stated* |
-| `solidweb.me` / `teamid.live` / `solidweb.app` | Meisdata | EU | *not stated* |
-| `solidweb.org` | Solid Grassroots | EU | *not stated* |
-| `trinpod.eu` / `trinpod.us` | Graphmetrix | EU / US | Trinpod |
-| `use.id` | Digita | EU | *not stated* |
+| `solidcommunity.net` | Solid Project | UK | **Pivot** (CSS remix) + SolidOS |
+| Inrupt Pod Spaces (`storage.inrupt.com`) | Inrupt | US, EU, APAC | **ESS** |
+| `*.inrupt.net` | Inrupt | — | NSS (legacy) — *community knowledge, not in catalog* |
+| Data Pod (`datapod.igrant.io`) | iGrant.io | EU | **NSS** |
+| `redpencil.io` | redpencil.io | EU | **CSS** |
+| `solidcommunity.au` | Solid Community AU | Australia | *not in catalog* |
+| `solidweb.me` | Meisdata | EU | **CSS** + SolidOS |
+| `teamid.live` | Meisdata | EU | **Pivot** + SolidOS (catalog status: Exploration) |
+| `solidweb.app` | Meisdata | EU | *not in catalog* |
+| `solidweb.org` | Solid Grassroots | EU | **NSS** + SolidOS (catalog status: Exploration) |
+| `trinpod.eu` / `trinpod.us` | Graphmetrix | EU / US | **Trinpod** |
+| `use.id` | Digita | EU | **CSS** |
 | `localhost:3000` (default config) | you | — | local CSS (this repo's AGENTS.md) |
 
-The get-a-pod page does **not** state which implementation most providers run — use the URL
-only as a first guess, then **confirm at runtime** (next section); never branch on the
+Most hosted pods run CSS or its Pivot remix — but **two get-a-pod providers run legacy NSS**
+(Data Pod, solidweb.org), so the NSS column of the matrix is live, not historical. Use the
+table as the first guess, then **confirm at runtime** (next section); never branch on the
 hostname alone. The final-stage test matrix in `AGENTS.md` §Servers is exactly this provider
 list.
 

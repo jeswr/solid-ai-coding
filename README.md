@@ -86,6 +86,11 @@ npx skills add jeswr/solid-ai-coding -a claude-code -a codex
 | [`solid-type-index`](./skills/solid-type-index/SKILL.md) | Reading, writing, and bootstrapping Type Index registries (with a compile-verified wrapper implementation) |
 | [`solid-scale-and-sharding`](./skills/solid-scale-and-sharding/SKILL.md) | Collection data without hitting the walls — sharding, index resources, client-side querying |
 | [`solid-notifications`](./skills/solid-notifications/SKILL.md) | Live-sync via the Solid Notifications Protocol and the legacy NSS channel |
+| [`accessible-html-links`](./skills/accessible-html-links/SKILL.md) | Native `<a href>` + WCAG link-purpose rules (derived from Solid-website review feedback) |
+
+The guide's Part 2 also names a **default set of third-party engineering skills** (vitest,
+Playwright, Node, TypeScript, semantic HTML, web design review, code review, and more) with
+verified one-line install commands — see AGENTS.md §Recommended skills.
 
 
 ## Contributing
