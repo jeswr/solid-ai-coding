@@ -57,13 +57,11 @@ These libraries are 0.x and their READMEs and repos drift from the published pac
    "wrapper" resolves to unrelated packages). Example query: *"define a TermWrapper mapping class
    with typed accessors"*. If context7 is not available, read
    `node_modules/@rdfjs/wrapper/**/*.d.ts` directly — never substitute training-data recall.
-2. **`@solid/object`, `@solid/reactive-authentication`, `@jeswr/fetch-rdf`** — **not indexed in
-   context7**. Do not accept a context7 result for them (name resolution returns the SolidJS UI
-   framework or the Solid Project website, both wrong). Use the bundled skills instead — they
-   document the published API surface: `solid-object`, `solid-reactive-authentication`,
-   `solid-fetch-rdf` (install: `npx skills add jeswr/solid-ai-coding`). Beyond the skills, the
-   source of truth is the `.d.ts` in `node_modules` for the **installed** version — the GitHub
-   repos' tests and demos track unreleased APIs; trust `node_modules` over the repo.
+2. **`@solid/object`, `@solid/reactive-authentication`, `@jeswr/fetch-rdf`** — **not in
+   context7**; name resolution returns wrong libraries — reject those results. Use the bundled
+   skills (`solid-object`, `solid-reactive-authentication`, `solid-fetch-rdf`), then the
+   `.d.ts` in `node_modules` for the **installed** version — repo tests/demos track unreleased
+   APIs; trust `node_modules` over the repo.
 3. **Everything else** (`n3`, Next.js, Tailwind, vitest, …) — query context7 normally before
    writing code against it.
 
@@ -106,18 +104,13 @@ The typed `querySelector<AuthorizationCodeFlow>` matters: the library does not a
 <script>opener.postMessage(location.href)</script>
 ```
 
-**Issuer resolution is built in** (v0.1.2): the provider maps the resource URL to its OIDC
-issuer from a fixed host list — `localhost:3000`, `*.solidcommunity.net`,
-`storage.inrupt.com` (PodSpaces), `*.solidweb.org`, `*.solidweb.app`, `teamid.live`,
-`datapod.igrant.io` — and **throws `Unknown issuer` for any other host**. For providers outside
-the list, wait for the next release (git HEAD adds a configurable issuer callback) rather than
-patching around it. ⚠️ `localhost:3000` is on the list **but interactive login against local
-CSS still fails in 0.1.2**: the issuer is hard-coded as `http://` and the library's
-`oauth4webapi` dependency rejects non-HTTPS issuers (`only requests to HTTPS are allowed`),
-with no app-level override. Two outs: the e2e-verified `WebIdDPoPTokenProvider` reference
-implementation bundled with the `solid-reactive-authentication` skill (WebID-driven issuer
-selection + `allowInsecureLoopback`, which makes local login work), or the servers section's
-hosted-issuer workaround.
+**Issuer resolution is built in** (v0.1.2): a fixed host list (`localhost:3000`,
+`*.solidcommunity.net`, `storage.inrupt.com`, `*.solidweb.org`, `*.solidweb.app`,
+`teamid.live`, `datapod.igrant.io`); any other host **throws `Unknown issuer`**. ⚠️ Interactive
+login against local CSS **still fails in 0.1.2** (`only requests to HTTPS are allowed` — the
+`http://` issuer is hard-coded, no override). Fix: the e2e-verified `WebIdDPoPTokenProvider`
+in the `solid-reactive-authentication` skill (WebID-driven issuer selection +
+`allowInsecureLoopback`); details + alternatives in `docs/local-ops.md`.
 
 Rules:
 - **Authentication goes through `@solid/reactive-authentication` only.** Do not use
@@ -347,10 +340,9 @@ internal access-control API on top of these and translate at the edge — that i
 codebase supports both paradigms correctly instead of silently working on only one server
 family. Exercise both against the two local CSS instances described in the servers section.
 
-Deployment reality (March 2026 community implementation survey): WAC has
-13 server implementations and 11 live services; ACP has 4 and 1. WAC-only coverage feels fine in
-development and then fails on ESS — which is exactly why the converter-backed dual support
-above is required, and why the test matrix includes both.
+Deployment reality (March 2026 community survey): WAC 13 server implementations / 11 live
+services; ACP 4 / 1. WAC-only coverage feels fine locally, then fails on ESS — hence the
+converter-backed dual support and both servers in the test matrix.
 
 Access control is fail-closed: if you cannot read or parse the ACL/ACR, treat the resource as
 private — never fall back to "open". And question whether your app should modify access rules at
