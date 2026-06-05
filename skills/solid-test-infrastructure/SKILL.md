@@ -33,8 +33,8 @@ they powered full popup-login e2e runs (3/3 stable) and authenticated write-path
    app on `:3200` (`next dev` would otherwise clash on 3000). One CSS instance per suite —
    startup is ~13s, so never per-test. `reuseExistingServer` keeps local iteration fast.
 2. **[`global-setup.ts`](./global-setup.ts)** — runs once after the servers are up:
-   - creates an account via the CSS account API (`POST /.account/account/` with `{}` — an
-     empty body 500s), registers a password, creates the pod;
+   - creates an account via the CSS account API (`POST /.account/account/` with `{}` — with a
+     JSON content-type an empty body 500s), registers a password, creates the pod;
    - mints **client-credentials**, then exchanges them for a **DPoP-bound token** (jose-built
      proofs — note the `ath` claim on resource requests);
    - **seeds the profile** — a fresh CSS pod profile has no `foaf:name` and no `pim:storage`

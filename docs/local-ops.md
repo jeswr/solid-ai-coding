@@ -72,6 +72,14 @@ npx @solid/community-server@7 -p 3000 \
   -c config/css-memory-wac-templates.json --seedConfig config/css-seed-example.json
 ```
 
+⚠️ **The path failure is silent.** Started from any other directory, CSS only logs
+`warn: Ignoring non-existing template folder …` and boots anyway — pods then have **no profile
+card at all** (`NotFoundHttpError`) and no `pim:storage`. If template pods come up bare, grep
+the CSS log for `Ignoring non-existing template folder`, and either start CSS from the repo
+root or edit `templateFolder` to an absolute path. Also note: `--seedConfig` provides no
+`name`, so template-seeded pods get `pim:storage` but **no `foaf:name`** — use Option 2 for
+display names (or hardcode a default in your template copy).
+
 How the override works (Components.js): the shipped
 [`config/css-memory-wac-templates.json`](../config/css-memory-wac-templates.json) is CSS's
 `default.json` with the `css:config/identity/pod/static.json` import **removed**, and its three
@@ -92,7 +100,7 @@ Verification: `curl -H "Accept: text/turtle" http://localhost:3000/<pod>/profile
 
 ## The account API (manual recipe)
 
-`POST /.account/account/` with body `{}` (**an empty body 500s**; keep the cookie) →
+`POST /.account/account/` with body `{}` (with `content-type: application/json` an **empty** body 500s — `Unexpected end of JSON input`; keep the cookie) →
 `GET /.account/` for the control URLs → `POST <controls.password.create>` `{email, password}` →
 `POST <controls.account.pod>` `{name}` → optionally
 `POST <controls.account.clientCredentials>` `{name, webId}` for token credentials. The WebID is
@@ -130,11 +138,13 @@ above) — no browser involved.
 |---|---|---|
 | Boot fails resolving a `css:config/...` import | The import doesn't exist in CSS 7 (often AI-invented) | Diff your imports against CSS's own `config/default.json` for your version |
 | Boot fails: duplicate / conflicting component definition | You redefined an `@id` whose defining import is still present | Remove the stock import, then redefine (see Option 1) |
-| `POST /.account/account/` → 500 `Unexpected end of JSON input` | Empty request body | Send `{}` with `content-type: application/json` |
+| `POST /.account/account/` → 500 `Unexpected end of JSON input` | Empty body **with** `content-type: application/json` | Send `{}` as the body |
 | Profile loads but app finds no name / no write path | Bare fresh profile | Option 1 or Option 2 above |
 | Login popup → `only requests to HTTPS are allowed` | 0.1.2 HTTP-issuer wall | `WebIdDPoPTokenProvider` + `allowInsecureLoopback` (above) |
 | `Unknown issuer <url>` thrown on first authenticated fetch | Resource host outside the published provider's fixed map | Same fix — the bundled provider resolves issuers from the WebID instead |
 | Auth works on PodSpaces, CSS rejects `iat is not recent enough` | A second auth layer sending ms-unit DPoP `iat` | Remove it; the sanctioned libraries send seconds |
 | Writes 412 | Stale ETag — someone else wrote | Re-fetch, re-apply, re-PUT (`AGENTS.md` §Writing data) |
+| Template pods bare / profile card `NotFoundHttpError` | `templateFolder` didn't resolve — it is **CWD-relative** and the failure is a silent warn | Start CSS from the repo root, or set `templateFolder` to an absolute path; grep the log for `Ignoring non-existing template folder` |
+| `oidc-provider WARNING: Unsupported runtime` at boot | Bleeding-edge Node (e.g. v25) outside oidc-provider's support matrix | Harmless — everything works; use a current LTS to silence it |
 | Pod data vanished after restart | In-memory backend — by design | Re-seed (instant), or `-c @css:config/file.json -f ./data` when persistence is genuinely needed |
 | `:3000` already in use | A previous CSS (or the app) owns it | Kill the listener; the app belongs on `:3200` |

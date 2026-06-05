@@ -51,7 +51,7 @@
       "resourcesGenerator": {
         "@id": "urn:solid-server:default:TemplatedResourcesGenerator"
       },
-      "comment": "Custom pod templates (profile born with pim:storage). Path is relative to the CWD you start CSS from - adjust if not running from the repo root."
+      "comment": "Custom pod templates (profile born with pim:storage). PATH IS RESOLVED AGAINST THE CWD you start CSS from, and a wrong path fails SILENTLY (warn: Ignoring non-existing template folder; pods then have no profile card). Run from the repo root, or change this to an absolute path."
     },
     {
       "@id": "urn:solid-server:default:TemplatedResourcesGenerator",

@@ -56,7 +56,7 @@ export async function createCssAccount(options: CssAccountOptions): Promise<CssA
 
   // 1. account -> password -> pod -> client credentials (the verified recipe)
   const jar: Jar = {};
-  await jsonPost(`${base}/.account/account/`, {}, jar); // {} — an empty body 500s
+  await jsonPost(`${base}/.account/account/`, {}, jar); // send {} — with content-type: application/json, an EMPTY body 500s
   const { controls } = (await (
     await fetch(`${base}/.account/`, { headers: jar.cookie ? { cookie: jar.cookie } : {} })
   ).json()) as { controls: { password: { create: string }; account: { pod: string; clientCredentials: string } } };
