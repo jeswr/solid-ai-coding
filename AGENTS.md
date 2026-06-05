@@ -102,7 +102,10 @@ the list, wait for the next release (git HEAD adds a configurable issuer callbac
 patching around it. ⚠️ `localhost:3000` is on the list **but interactive login against local
 CSS still fails in 0.1.2**: the issuer is hard-coded as `http://` and the library's
 `oauth4webapi` dependency rejects non-HTTPS issuers (`only requests to HTTPS are allowed`),
-with no app-level override — see the servers section for the local-dev workaround.
+with no app-level override. Two outs: the e2e-verified `WebIdDPoPTokenProvider` reference
+implementation bundled with the `solid-reactive-authentication` skill (WebID-driven issuer
+selection + `allowInsecureLoopback`, which makes local login work), or the servers section's
+hosted-issuer workaround.
 
 Rules:
 - **Authentication goes through `@solid/reactive-authentication` only.** Do not use
@@ -392,9 +395,11 @@ Three local-dev realities the happy path hides:
 - **Interactive login against local CSS does not work in `@solid/reactive-authentication`
   0.1.2** — the hard-coded `http://localhost:3000` issuer is rejected by `oauth4webapi`
   (`only requests to HTTPS are allowed`; no override exists, and HTTPS-ing CSS doesn't help
-  because the issuer URL is fixed). Test interactive login against
-  [solidcommunity.net](https://solidcommunity.net); drive *local* authenticated reads/writes in
-  tests and seed scripts with a client-credentials DPoP token from the CSS account API.
+  because the issuer URL is fixed). Either use the bundled `WebIdDPoPTokenProvider`
+  (`solid-reactive-authentication` skill, `allowInsecureLoopback: true` — e2e-verified against
+  local CSS), or test interactive login against
+  [solidcommunity.net](https://solidcommunity.net) and drive *local* authenticated reads/writes
+  in tests and seed scripts with a client-credentials DPoP token from the CSS account API.
 - **A fresh CSS pod profile is bare** — only `a foaf:Person; solid:oidcIssuer <…>`. No
   `foaf:name`, no `pim:storage`, so the guide's profile read yields no name and **no write
   path**. Seed the profile once (authenticated PUT adding `foaf:name` and
