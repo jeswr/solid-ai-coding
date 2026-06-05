@@ -1,12 +1,11 @@
 ---
 name: solid-type-index
 description: >-
-  Read, write, and bootstrap Solid Type Index registries (public/private) for
-  cross-app data discovery. Use when an app must find where another app stored a
-  given RDF class in the pod, or register its own data so other apps can find it.
-  Covers the create-and-link fallback for servers (notably CSS) that do not seed
-  the indexes, implemented through @rdfjs/wrapper TermWrapper subclasses. Read
-  this before deriving ad-hoc paths from the pod root for interop-facing data.
+  Use when an app must find where another app stored a given RDF class in the pod, register its
+  own data so other apps can find it, or bootstrap missing indexes — solid:publicTypeIndex /
+  solid:privateTypeIndex absent from a profile (CSS does not seed them), solid:TypeRegistration,
+  solid:forClass lookups. Includes a compile-verified TermWrapper implementation and the
+  create-and-link fallback.
 ---
 
 # Solid Type Index

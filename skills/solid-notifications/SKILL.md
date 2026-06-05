@@ -1,13 +1,7 @@
 ---
 name: solid-notifications
 description: >-
-  Subscribe to Solid resource and container changes for live-sync apps — discover the
-  subscription endpoint from Link headers / the storage description, negotiate a
-  WebSocketChannel2023 channel (modern Solid Notifications Protocol, used by CSS and
-  modern servers), and handle the legacy NSS wss:// "live update" channel. Use when
-  building collaborative or auto-refreshing UIs, or when an app needs to react to pod
-  writes instead of polling. Pairs with the house stack (@solid/reactive-authentication
-  global-fetch patch) — no @inrupt/solid-client-notifications.
+  Use when an app must react to pod changes without polling — live-sync or collaborative UIs, watching an inbox or container, or a subscription that won't connect. Covers endpoint discovery, WebSocketChannel2023 subscribe/listen, the legacy NSS wss channel, and reconnection handling.
 ---
 
 # Solid notifications — live-sync over the pod

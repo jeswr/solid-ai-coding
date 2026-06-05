@@ -70,7 +70,7 @@ Cursor, Zed, Windsurf, Gemini CLI, GitHub Copilot coding agent, Devin, and a gro
 
 ## Solid skills
 
-This repo bundles four [Agent Skills](https://agentskills.io/) under [`skills/`](./skills/)
+This repo bundles seven [Agent Skills](https://agentskills.io/) under [`skills/`](./skills/)
 that go deeper than the guide — install them into your agent with:
 
 ```sh
@@ -79,14 +79,14 @@ npx skills add jeswr/solid-ai-coding -a claude-code -a codex
 
 | Skill | Covers |
 |---|---|
+| [`solid-fetch-rdf`](./skills/solid-fetch-rdf/SKILL.md) | `@jeswr/fetch-rdf` API reference (not in context7) |
+| [`solid-object`](./skills/solid-object/SKILL.md) | `@solid/object` API reference + `ProfileAgent` rendering reference class (not in context7) |
+| [`solid-reactive-authentication`](./skills/solid-reactive-authentication/SKILL.md) | `@solid/reactive-authentication` API reference + login/IdP-selection UX spec (not in context7) |
 | [`solid-server-matrix`](./skills/solid-server-matrix/SKILL.md) | Diagnosing CSS / ESS / NSS differences when an app works on one server and breaks on another |
 | [`solid-type-index`](./skills/solid-type-index/SKILL.md) | Reading, writing, and bootstrapping Type Index registries (with a compile-verified wrapper implementation) |
 | [`solid-scale-and-sharding`](./skills/solid-scale-and-sharding/SKILL.md) | Collection data without hitting the walls — sharding, index resources, client-side querying |
 | [`solid-notifications`](./skills/solid-notifications/SKILL.md) | Live-sync via the Solid Notifications Protocol and the legacy NSS channel |
 
-More Solid skill files live at
-[`solid-contrib/llm-skills`](https://github.com/solid-contrib/llm-skills) (currently being
-restructured to the Agent Skills format; these four are candidates to graduate there).
 
 ## Contributing
 

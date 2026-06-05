@@ -1,14 +1,7 @@
 ---
 name: solid-server-matrix
 description: >-
-  Diagnose and branch on Solid server differences (CSS / ESS / NSS / hosted
-  pods) — Solid-OIDC + DPoP conformance, UMA as_uri, WAC vs ACP, type-index
-  auto-seeding, content-type strictness, notifications protocol, ETag
-  reliability. Use when an app works on one Solid server and breaks on another:
-  auth that succeeds on Inrupt PodSpaces but fails on a local Community Solid
-  Server, a 403 on PATCH after writing an ACL, missing type-index files, a 500
-  on PUT, or notifications that won't subscribe. Companion to this repo's
-  AGENTS.md app-build guide; do not contradict its stack choices.
+  Use when a Solid app works on one server and breaks on another — auth succeeds on PodSpaces but CSS rejects 'iat is not recent enough', 403 on PATCH after writing an ACL, missing type indexes, 500 on PUT, notifications that won't subscribe, or an apparent CORS error. Differential reference for CSS / ESS / NSS with runtime detection.
 ---
 
 # Solid server matrix
@@ -43,23 +36,35 @@ Authorship + "ACL implemented for NSS, ACP on ESS" confirmed:
 "NSS isn't an Inrupt product, it is a legacy community project that preceded CSS":
 [forum/usage-of-as-uri/6462](https://forum.solidproject.org/t/usage-of-as-uri-www-authenticate-parameter/6462).
 
-### Host → implementation decoder
+The canonical list of what is deployable and deployed is
+[solidproject.org/users/get-a-pod](https://solidproject.org/users/get-a-pod). It names **six
+self-hostable implementations** — CSS, ESS,
+[Trinpod](https://graphmetrix.com/trinpod-server),
+[Manas](https://manomayam.github.io/manas/introduction.html), NSS, and
+[PHP Solid Server](https://pdsinterop.org/php-solid-server/) — of which this matrix
+characterises the three you will meet at a hackathon (CSS / ESS / NSS); treat the other three
+as "detect at runtime" (next section).
 
-Use the URL to guess the implementation, then **confirm at runtime** (next
-section) — never branch on the hostname alone.
+### Hosted providers (per get-a-pod, June 2026)
 
-| Host pattern | Likely implementation | Confidence |
-|---|---|---|
-| `*.solidcommunity.net` | hosted CSS | community knowledge — *unverified in this trawl* |
-| `storage.inrupt.com`, `*.inrupt.com` (PodSpaces) | ESS | community knowledge — *unverified in this trawl* |
-| `*.inrupt.net` | NSS (legacy) | community knowledge — *unverified in this trawl* |
-| `localhost:3000` (default config) | local CSS | this repo's AGENTS.md |
+| Provider | Operator | Region | Implementation |
+|---|---|---|---|
+| `solidcommunity.net` | Solid Project | UK | CSS (hosted) — *community knowledge, unverified on-page* |
+| Inrupt Pod Spaces (`storage.inrupt.com`) | Inrupt | US, EU, APAC | ESS |
+| `*.inrupt.net` | Inrupt | — | NSS (legacy) — *community knowledge* |
+| Data Pod (`datapod.igrant.io`) | iGrant.io | EU | *not stated* |
+| `redpencil.io` | redpencil.io | EU | *not stated* |
+| `solidcommunity.au` | Solid Community AU | Australia | *not stated* |
+| `solidweb.me` / `teamid.live` / `solidweb.app` | Meisdata | EU | *not stated* |
+| `solidweb.org` | Solid Grassroots | EU | *not stated* |
+| `trinpod.eu` / `trinpod.us` | Graphmetrix | EU / US | Trinpod |
+| `use.id` | Digita | EU | *not stated* |
+| `localhost:3000` (default config) | you | — | local CSS (this repo's AGENTS.md) |
 
-The forum threads confirm the *implementations* and their ownership but do **not**
-state the host→implementation mapping; treat the table as a working heuristic and
-verify by inspecting the live server. (AGENTS.md's auth issuer list also recognises
-`*.solidweb.org`, `*.solidweb.app`, `teamid.live`, `datapod.igrant.io` — provider
-implementations there are unverified.)
+The get-a-pod page does **not** state which implementation most providers run — use the URL
+only as a first guess, then **confirm at runtime** (next section); never branch on the
+hostname alone. The final-stage test matrix in `AGENTS.md` §Servers is exactly this provider
+list.
 
 ---
 
@@ -93,7 +98,7 @@ Branch on these. Each cell carries evidence or is marked **[unverified]**.
 3. WAC on NSS+CSS, ACP on ESS:
    [forum/bridging-solid-with-peergos/5494](https://forum.solidproject.org/t/bridging-solid-with-peergos/5494),
    [forum/solid-servers-and-custom-ontologies/7208](https://forum.solidproject.org/t/solid-servers-and-custom-ontologies/7208).
-   Deployment count (Solid26, Mar 2026): WAC 13 implementations / 11 live; ACP 4 / 1.
+   Deployment count (March 2026 community survey): WAC 13 implementations / 11 live; ACP 4 / 1.
 4. CSS does not provision type-index / preferences / inbox: "things like
    typeIndexes and preferences and even the inbox are not available." TBL, asked
    whether apps should create them: "Yes" … "The same place they are now."
