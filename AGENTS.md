@@ -449,13 +449,27 @@ encounter it.
 
 ## Part 2 — Engineering
 
+### Project bring-up — IN ORDER, before any feature code
+
+1. **Scaffold**: `create-next-app` (TypeScript, App Router, Tailwind, ESLint, `src/` dir,
+   `@/` alias), then `npx shadcn@latest init -b radix -d` (headless; bare `shadcn init`
+   prompts). Node ≥ 24.
+2. **Install this guide AFTER scaffolding.** ⚠️ `create-next-app` writes its own `AGENTS.md`
+   and **overwrites this guide** (observed failure: the agent lost all Solid guidance
+   mid-build). Scaffold first, then fetch the guide files / run the setup script — it merges,
+   preserving the framework's rules below the guide. Scaffolded after setup? **Re-run the
+   setup script now** and confirm this file starts with "Solid application development".
+3. **Test infrastructure — not optional**: copy `playwright.config.ts`, `global-setup.ts`,
+   `css-account.ts`, `dev.mjs` from the `solid-test-infrastructure` skill;
+   `npm i -D vitest @playwright/test jose`; wire `dev` / `test` / `test:e2e` scripts.
+4. **Verify empty-green**: `tsc --noEmit` passes, `vitest run` passes, `npm run dev` prints
+   the seeded-credentials banner. A project without working test scripts is not scaffolded.
+5. Build features **test-first** (§Testing below).
+
 ### Application stack
 
 - **Next.js (App Router) + TypeScript + Tailwind + [shadcn/ui](https://ui.shadcn.com/)**,
   deployed on **Vercel** (auto-deploy on push; no CI deploy job).
-- Scaffold: `create-next-app` (TypeScript, App Router, Tailwind, ESLint, `src/` dir, `@/`
-  alias), then `npx shadcn@latest init -b radix -d` (headless — bare `shadcn init` prompts
-  interactively). Node ≥ 24 (the Solid stack above requires it).
 - **No hand-rolled UI primitives.** Buttons, dialogs, dropdowns, forms come from shadcn/ui;
   icons from Lucide; forms with `react-hook-form` + `zod`; toasts with `sonner`.
 - **UI quality is a requirement, not a polish phase.** Default output tends to look bland —

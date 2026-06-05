@@ -15,4 +15,7 @@ That's it! Bob will:
 4. Install the recommended engineering skills (vitest, Playwright, TypeScript, accessibility, code quality, etc.)
 5. Verify the setup is working
 
+**If you scaffold a Next.js app afterwards**: `create-next-app` overwrites `AGENTS.md` — ask
+Bob to re-run the setup script (it merges; nothing is lost), or scaffold before setup.
+
 After Bob completes the setup, reload the window (Cmd+Shift+P → "Developer: Reload Window") to activate everything.

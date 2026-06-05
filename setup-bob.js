@@ -6,7 +6,7 @@
  */
 
 const { spawn } = require('child_process');
-const { mkdir, writeFile } = require('fs/promises');
+const { mkdir, writeFile, readFile } = require('fs/promises');
 const { join } = require('path');
 const https = require('https');
 
@@ -58,10 +58,32 @@ function runCommand(command, args, options = {}) {
   });
 }
 
+const GUIDE_MARKER = '# Solid application development — agent guide';
+const APPENDIX_SENTINEL = '<!-- preserved-by-setup: pre-existing agent rules below -->';
+
 async function downloadAndSaveFile(url, path, name) {
   try {
     const content = await download(url);
-    await writeFile(path, content);
+    let finalContent = content;
+    // PROTECTION: scaffolders (create-next-app ships its own AGENTS.md) overwrite
+    // guide files. Preserve any non-guide AGENTS.md content by appending it below
+    // the guide behind a sentinel; re-runs refresh the guide and keep the appendix.
+    if (path === 'AGENTS.md') {
+      const existing = await readFile(path, 'utf8').catch(() => null);
+      if (existing) {
+        let appendix = null;
+        if (!existing.includes(GUIDE_MARKER)) {
+          appendix = existing.trim(); // e.g. Next.js's own agent rules
+        } else if (existing.includes(APPENDIX_SENTINEL)) {
+          appendix = existing.split(APPENDIX_SENTINEL)[1].trim(); // keep prior merge
+        }
+        if (appendix) {
+          finalContent = `${content}\n\n${APPENDIX_SENTINEL}\n\n${appendix}\n`;
+          log('  ⚠', `existing ${name} content preserved below the guide`);
+        }
+      }
+    }
+    await writeFile(path, finalContent);
     log('  ✓', name);
   } catch (error) {
     log('  ✗', `${name} (${error.message})`);
@@ -158,6 +180,8 @@ async function main() {
     console.log('');
 
     log('🚀', 'After reloading, you can start building your Solid application!');
+    log('', '   Scaffolding with create-next-app AFTER this setup? It overwrites');
+    log('', '   AGENTS.md — re-run this script afterwards (it merges, never loses).');
     console.log('');
 
   } catch (error) {

@@ -14,7 +14,10 @@ The guide itself is [**`AGENTS.md`**](./AGENTS.md). It has two parts:
 
 ## Use it in your project
 
-Copy two files into your repository root:
+**Order matters**: scaffold your app first (`create-next-app` writes its own `AGENTS.md` and
+would overwrite the guide), then install the guide. The setup script merges if it finds an
+existing `AGENTS.md`; re-run it any time scaffolding clobbers the files. Copy two files into
+your repository root:
 
 ```sh
 curl -fsSLO https://raw.githubusercontent.com/jeswr/solid-ai-coding/main/AGENTS.md
