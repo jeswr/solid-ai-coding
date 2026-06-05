@@ -67,6 +67,7 @@ always your own `TermWrapper` subclass with `…As` setters over the same datase
 | Gotcha | Detail |
 |---|---|
 | `mainSubject` is `undefined` when the profile carries no `solid:oidcIssuer` | Surface a clear error: the WebID is not usable for Solid login |
+| Fresh CSS pod profiles are bare | Only `foaf:Person` + `solid:oidcIssuer` — `name` is `undefined` and `storageUrls` is empty until the profile is seeded (AGENTS.md §Servers) |
 | `organization` / `role` / `title` expect **NamedNode** objects | A literal value in the data throws `TermTypeError` — wrap reads of untrusted profiles (see `first()` in `profile-agent.ts`) |
 | `n3` must be installed explicitly | It is a devDependency upstream, not a runtime dependency |
 | One `DataFactory` everywhere | Mixing factories breaks term equality |

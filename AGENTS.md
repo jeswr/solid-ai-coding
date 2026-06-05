@@ -97,9 +97,12 @@ The typed `querySelector<AuthorizationCodeFlow>` matters: the library does not a
 **Issuer resolution is built in** (v0.1.2): the provider maps the resource URL to its OIDC
 issuer from a fixed host list — `localhost:3000`, `*.solidcommunity.net`,
 `storage.inrupt.com` (PodSpaces), `*.solidweb.org`, `*.solidweb.app`, `teamid.live`,
-`datapod.igrant.io` — and **throws `Unknown issuer` for any other host**. That list covers the
-whole development and initial-testing matrix below; for providers outside it, wait for the next
-release (git HEAD adds a configurable issuer callback) rather than patching around it.
+`datapod.igrant.io` — and **throws `Unknown issuer` for any other host**. For providers outside
+the list, wait for the next release (git HEAD adds a configurable issuer callback) rather than
+patching around it. ⚠️ `localhost:3000` is on the list **but interactive login against local
+CSS still fails in 0.1.2**: the issuer is hard-coded as `http://` and the library's
+`oauth4webapi` dependency rejects non-HTTPS issuers (`only requests to HTTPS are allowed`),
+with no app-level override — see the servers section for the local-dev workaround.
 
 Rules:
 - **Authentication goes through `@solid/reactive-authentication` only.** Do not use
@@ -192,6 +195,9 @@ for (const r of container?.contains ?? []) console.log(r.id, r.name, r.isContain
   new `TermWrapper` subclass (see "Writing data"), not a different library.
 - Wrap errors: `fetchRdf` throws `RdfFetchError` with `.status`/`.url` — branch on it, don't
   string-match messages.
+- For testability, any injected `fetch` parameter must be **strictly optional and omitted by
+  default** — never default it to a captured `fetch` reference. Passing any `fetch` to
+  `fetchRdf` bypasses the auth-patched global, so the 401→login upgrade silently never runs.
 
 ### WebID profiles and discovery
 
@@ -281,7 +287,8 @@ Two suffix conventions, and they run in **opposite directions**:
 - Property accessors: read with `…From` (`RequiredFrom` / `OptionalFrom` / `SetFrom` — values
   *from* the dataset), write with `…As` (`RequiredAs` / `OptionalAs`).
 - Value mappers: read with `…As` (`LiteralAs.string`, `LiteralAs.number`), write with `…From`
-  (`LiteralFrom.string`, `LiteralFrom.integer` / `LiteralFrom.double` — no `.number`).
+  (`LiteralFrom.string`, `LiteralFrom.integer` / `LiteralFrom.double` — no `.number`). Dates:
+  read with `LiteralAs.date` (→ `Date`), write with `LiteralFrom.dateTime` / `LiteralFrom.date`.
 
 | Cardinality | Read | Write |
 |---|---|---|
@@ -385,12 +392,31 @@ npx @solid/community-server@7 -c @css:config/file.json -f ./data
 `ldp/authorization/webacl.json → acp.json` and `util/auxiliary/acl.json → acr.json`. Verified:
 the instance advertises `Link: <…/.acr>; rel="acl"`.)
 
-Create a test account + pod through the UI at `http://localhost:3000` (sign up → create pod).
-Your WebID is `http://localhost:3000/<pod>/profile/card#me` — pass exactly that string to
-`fetchRdf` as your first read; its `pim:storage` gives the pod root for writes. `localhost:3000`
-is on the auth library's built-in issuer list, so login works locally with no extra config.
-`:3001` is not on that list — for *authenticated* ACP testing, temporarily run the ACP config on
-`:3000` instead; use `:3001` for unauthenticated ACP behaviour alongside the WAC instance.
+Create a test account + pod through the UI at `http://localhost:3000` (sign up → create pod),
+or via the account API: `POST /.account/account/` with body `{}` (an empty body 500s; keep the
+cookie) → `GET /.account/` for the control URLs → `POST <password.create>` with
+`{email, password}` → `POST <account.pod>` with `{name}`. Your WebID is
+`http://localhost:3000/<pod>/profile/card#me`.
+
+Three local-dev realities the happy path hides:
+
+- **Interactive login against local CSS does not work in `@solid/reactive-authentication`
+  0.1.2** — the hard-coded `http://localhost:3000` issuer is rejected by `oauth4webapi`
+  (`only requests to HTTPS are allowed`; no override exists, and HTTPS-ing CSS doesn't help
+  because the issuer URL is fixed). Test interactive login against
+  [solidcommunity.net](https://solidcommunity.net); drive *local* authenticated reads/writes in
+  tests and seed scripts with a client-credentials DPoP token from the CSS account API.
+- **A fresh CSS pod profile is bare** — only `a foaf:Person; solid:oidcIssuer <…>`. No
+  `foaf:name`, no `pim:storage`, so the guide's profile read yields no name and **no write
+  path**. Seed the profile once (authenticated PUT adding `foaf:name` and
+  `pim:storage <http://localhost:3000/<pod>/>`); take the pod root from the account API's
+  pod-create response — not from the `rel="type"` storage Link header, which is not a
+  discovery mechanism.
+- **CSS owns `:3000`** (the issuer map requires it) and `next dev` defaults to `:3000` too —
+  run the app on another port: `next dev -p 3200`.
+
+`:3001` (the ACP instance) is not on the issuer list — use it for unauthenticated ACP
+behaviour; run the ACP config on `:3000` when you need authenticated ACP testing.
 
 ### Solid skills
 
@@ -416,8 +442,9 @@ encounter it.
 
 - **Next.js (App Router) + TypeScript + Tailwind + [shadcn/ui](https://ui.shadcn.com/)**,
   deployed on **Vercel** (auto-deploy on push; no CI deploy job).
-- Scaffold: `create-next-app` (TypeScript, App Router, Tailwind, ESLint, `src/` dir, `@/` alias),
-  then `shadcn init`. Node ≥ 24 (the Solid stack above requires it).
+- Scaffold: `create-next-app` (TypeScript, App Router, Tailwind, ESLint, `src/` dir, `@/`
+  alias), then `npx shadcn@latest init -b radix -d` (headless — bare `shadcn init` prompts
+  interactively). Node ≥ 24 (the Solid stack above requires it).
 - **No hand-rolled UI primitives.** Buttons, dialogs, dropdowns, forms come from shadcn/ui;
   icons from Lucide; forms with `react-hook-form` + `zod`; toasts with `sonner`.
 - Layering: `src/lib/` is the data layer (auth, RDF I/O, discovery, sharing) with typed,
@@ -441,13 +468,18 @@ encounter it.
 
 ### Testing
 
-- **Vitest** for `src/lib/` unit/integration tests. Inject `fetch` as a parameter so it can be
-  mocked; reserve real-server tests for genuine round-trips.
+- **Vitest** for `src/lib/` unit/integration tests. Inject `fetch` as an **optional** parameter
+  so tests can mock it — but omit it everywhere in production code paths, or you bypass the
+  auth-patched global (see Part 1 §Reading data).
 - **Playwright** for golden-path e2e against a local Community Solid Server: start **one** CSS
   instance per suite (global setup — startup is slow), use a **fresh account per write test**
   for isolation, share a read-only fixture account otherwise.
 - Don't: snapshot-test UI, test shadcn's own primitives, `sleep()` (use auto-waits), or depend
   on test order.
+- Toolchain pitfalls: keep Playwright `globalSetup` self-contained `.ts` (importing a sibling
+  `.mjs`/`.ts` from it trips the config transpiler in a CJS-default project), and avoid TS
+  parameter properties (`constructor(readonly x…)`) in files run via `node x.ts` — strip-only
+  mode rejects them.
 - Widen the server matrix as the app matures — see "Servers — develop, test, release" in Part 1.
 
 ### Recommended skills

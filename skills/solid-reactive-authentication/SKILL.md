@@ -60,6 +60,13 @@ The published provider resolves the OIDC issuer **internally** from the resource
 issuer`** — that error means the pod's host is outside the built-in map, not that your code is
 wrong. A configurable issuer callback exists upstream and is expected in the next release.
 
+⚠️ **Local CSS login is broken in 0.1.2** despite `localhost:3000` being on the list: the
+issuer is hard-coded as `http://localhost:3000` and `oauth4webapi` refuses non-HTTPS issuers
+(`OperationProcessingError: only requests to HTTPS are allowed`) with no app-level
+`allowInsecureRequests` hook — and HTTPS-ing CSS doesn't help because the issuer URL is fixed.
+Test interactive login against solidcommunity.net; use client-credentials DPoP tokens from the
+CSS account API for local authenticated test traffic.
+
 ## Sessions, reloads, silent re-auth
 
 Tokens live **in memory only**. A hard reload drops them; the next `401` re-runs the flow with
@@ -103,5 +110,6 @@ choice in when the configurable callback ships):
 | Construct `ReactiveFetchManager` **once, early** | It patches the global; libraries that captured `fetch` earlier bypass auth |
 | Untyped `querySelector` fails to compile | The library doesn't augment `HTMLElementTagNameMap` — use `querySelector<AuthorizationCodeFlow>(…)` |
 | `Unknown issuer` | Host outside the 0.1.2 built-in map — see above |
+| `only requests to HTTPS are allowed` on local login | The 0.1.2 HTTP-issuer wall — see above; interactive login needs an HTTPS issuer |
 | CSS-only auth failure `iat is not recent enough` | A *second* auth layer sending ms-unit DPoP `iat`; this library is correct — remove the other layer |
 | Worker mode | `ReactiveFetchWorkerManager` registers a repo-relative worker path; treat as not production-ready in 0.1.x |
