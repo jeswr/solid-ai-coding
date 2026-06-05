@@ -148,3 +148,4 @@ above) — no browser involved.
 | `oidc-provider WARNING: Unsupported runtime` at boot | Bleeding-edge Node (e.g. v25) outside oidc-provider's support matrix | Harmless — everything works; use a current LTS to silence it |
 | Pod data vanished after restart | In-memory backend — by design | Re-seed (instant), or `-c @css:config/file.json -f ./data` when persistence is genuinely needed |
 | `:3000` already in use | A previous CSS (or the app) owns it | Kill the listener; the app belongs on `:3200` |
+| Account API answers `308` or HTML (`Unexpected token '<'`) | **Something that isn't CSS owns `:3000`** — classically a stray `next dev` with its default port | `lsof -i :3000`, kill it, restart CSS; give every app an explicit `-p 3200` |

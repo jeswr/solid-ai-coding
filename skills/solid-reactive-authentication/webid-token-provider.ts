@@ -138,8 +138,15 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    * reactive loop regardless of access-control surprises.)
    */
   readonly #profileFetch: typeof fetch;
-  /** Cached sessions keyed by issuer URL. */
-  readonly #sessions = new Map<string, IssuerSession>();
+  /**
+   * Memoised issuer resolution: the user is asked for their WebID ONCE per
+   * provider instance, not on every 401 — and concurrent 401s share the same
+   * in-flight prompt (single-flight). Cleared on failure so a cancelled or
+   * failed prompt can be retried.
+   */
+  #issuer?: Promise<URL>;
+  /** Single-flight session per issuer: parallel 401s share one login flow. */
+  readonly #sessions = new Map<string, Promise<IssuerSession>>();
 
   constructor(
     callbackUri: string,
@@ -189,7 +196,11 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
   }
 
   async upgrade(request: Request): Promise<Request> {
-    const issuer = await this.#resolveIssuer(request.signal);
+    this.#issuer ??= this.#resolveIssuer(request.signal).catch((e) => {
+      this.#issuer = undefined; // allow retry after cancel/failure
+      throw e;
+    });
+    const issuer = await this.#issuer;
     const session = await this.#getSession(issuer, request.signal);
     const headers = new Headers(request.headers);
     headers.set(
@@ -206,13 +217,16 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     return new Request(request, { headers });
   }
 
-  /** Reuse a cached session for the issuer, else run the full code flow once. */
+  /** Reuse the (possibly in-flight) session for the issuer, else run the code flow once. */
   async #getSession(issuer: URL, signal: AbortSignal): Promise<IssuerSession> {
     const cached = this.#sessions.get(issuer.href);
     if (cached) return cached;
-    const session = await this.#authenticate(issuer, signal);
-    this.#sessions.set(issuer.href, session);
-    return session;
+    const pending = this.#authenticate(issuer, signal).catch((e) => {
+      this.#sessions.delete(issuer.href); // failed login is retryable
+      throw e;
+    });
+    this.#sessions.set(issuer.href, pending);
+    return pending;
   }
 
   /**
@@ -461,10 +475,16 @@ export function promptWebIdDialog(initialValue = ""): Promise<string> {
         cleanup();
         reject(new DOMException("WebID entry cancelled", "AbortError"));
       });
+    dialog.addEventListener("cancel", () => {
+      // Escape key: a cancellation, never a submission (even with a prefilled value).
+      settled = true;
+      cleanup();
+      reject(new DOMException("WebID entry cancelled", "AbortError"));
+    });
     dialog.addEventListener("close", () => {
       if (settled) return;
       settled = true;
-      const value = input.value.trim();
+      const value = dialog.returnValue === "continue" ? input.value.trim() : "";
       cleanup();
       if (value) resolve(value);
       else reject(new DOMException("WebID entry cancelled", "AbortError"));

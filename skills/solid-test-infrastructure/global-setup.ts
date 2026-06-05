@@ -87,6 +87,17 @@ async function seedProfile(ccId: string, ccSecret: string) {
 }
 
 export default async function globalSetup() {
+  // Guard: make sure :3000 is actually a CSS — a stray dev server (e.g. a `next dev`
+  // with its default port) answers 200 on "/" and poisons everything downstream
+  // with cryptic 308/HTML responses.
+  const probe = await fetch(`${BASE}/.account/`, { headers: { accept: "application/json" } });
+  if (!probe.ok || !(probe.headers.get("content-type") ?? "").includes("json")) {
+    throw new Error(
+      `Whatever is listening on ${BASE} is not a Community Solid Server ` +
+        `(/.account/ -> ${probe.status} ${probe.headers.get("content-type")}). ` +
+        `Check 'lsof -i :3000' — a stray 'next dev' (default port 3000) is the usual culprit.`,
+    );
+  }
   const jar: Jar = {};
   await jsonPost(`${BASE}/.account/account/`, {}, jar);
   const c = await controls(jar);

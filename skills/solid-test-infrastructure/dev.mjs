@@ -83,10 +83,11 @@ async function seed({ pod, name, email, password }) {
     },
     body: "grant_type=client_credentials&scope=webid",
   });
+  if (!tr.ok) throw new Error(`token ${tr.status}: ${await tr.text()}`);
   const { access_token } = await tr.json();
   const ath = createHash("sha256").update(access_token).digest("base64url");
   const profileDoc = `${BASE}/${pod}/profile/card`;
-  await fetch(profileDoc, {
+  const put = await fetch(profileDoc, {
     method: "PUT",
     headers: {
       authorization: `DPoP ${access_token}`,
@@ -103,7 +104,17 @@ async function seed({ pod, name, email, password }) {
   foaf:name "${name}".
 `,
   });
+  if (!put.ok && put.status !== 205) throw new Error(`profile PUT ${put.status}: ${await put.text()}`);
   return { webId, email, password, podRoot: `${BASE}/${pod}/` };
+}
+
+/** On the tolerant path, only claim "ready" if the pod really is seeded. */
+async function verifySeeded(pod) {
+  const res = await fetch(`${BASE}/${pod}/profile/card`, { headers: { accept: "text/turtle" } });
+  if (!res.ok) return false;
+  const ttl = await res.text();
+  // CSS serialises with prefixes — match the prefixed AND full-IRI forms.
+  return ttl.includes("pim:storage") || ttl.includes("pim/space#storage");
 }
 
 let cssAlreadyUp = false;
@@ -120,14 +131,19 @@ const seeded = [];
 for (const account of ACCOUNTS) {
   try {
     seeded.push(await seed(account));
-  } catch {
-    // Account/pod already exists (reused CSS) — the known credentials still apply.
-    seeded.push({
-      webId: `${BASE}/${account.pod}/profile/card#me`,
-      email: account.email,
-      password: account.password,
-      podRoot: `${BASE}/${account.pod}/`,
-    });
+  } catch (e) {
+    // Likely already seeded on a reused CSS — but VERIFY before claiming ready.
+    if (await verifySeeded(account.pod)) {
+      seeded.push({
+        webId: `${BASE}/${account.pod}/profile/card#me`,
+        email: account.email,
+        password: account.password,
+        podRoot: `${BASE}/${account.pod}/`,
+      });
+    } else {
+      console.error(`✗ seeding ${account.pod} failed and the pod is not usable: ${e.message}`);
+      process.exitCode = 1;
+    }
   }
 }
 
@@ -145,7 +161,11 @@ console.log("═".repeat(64));
 console.log(`   IdP / CSS UI: ${BASE}/   |   app: http://localhost:${APP_PORT}\n`);
 
 if (!process.argv.includes("--no-app")) {
-  start("npx", ["next", "dev", "-p", String(APP_PORT)]);
+  // Default is Next.js; any framework works — set APP_CMD to your dev command,
+  // e.g. APP_CMD="npx vite --port 3200" node scripts/dev.mjs
+  const appCmd = process.env.APP_CMD ?? `npx next dev -p ${APP_PORT}`;
+  const [cmd, ...args] = appCmd.split(" ");
+  start(cmd, args);
 } else {
   console.log("(--no-app: CSS only — press Ctrl-C to stop)");
 }

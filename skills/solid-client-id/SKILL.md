@@ -78,6 +78,10 @@ token_endpoint_auth_method`. Anything else you add is dropped on JSON-LD expansi
 | **Caching** | OPs may cache the document. A short `cache-control` (e.g. `max-age=300`) lets edits propagate without forcing a re-fetch every login. |
 | **Must stay reachable** | The OP fetches it live during every fresh login. If the URL 404s or moves, login breaks. |
 
+Any host works provided the serving URL equals `client_id` and the Content-Type is right —
+the recipe below is the verified Next.js/Vercel variant; adapt the same shape to your
+framework's route/handler mechanism.
+
 ### Next.js / Vercel hosting recipe (verified)
 
 Do **not** drop the file in `public/` — `next dev` serves a `public/*.jsonld` file as **404**

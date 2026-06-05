@@ -30,8 +30,10 @@ they powered full popup-login e2e runs (3/3 stable) and authenticated write-path
 
 1. **[`playwright.config.ts`](./playwright.config.ts)** — the two-`webServer` pattern: one
    in-memory CSS@7 on `:3000` (it must own that port — the auth issuer map requires it) and the
-   app on `:3200` (`next dev` would otherwise clash on 3000). One CSS instance per suite —
-   startup is ~13s, so never per-test. `reuseExistingServer` keeps local iteration fast.
+   app on `:3200` (`next dev` would otherwise clash on 3000; **using another framework, swap
+   that webServer command for your dev server on `:3200`** — the harness is framework-agnostic,
+   as is `dev.mjs` via `APP_CMD`). One CSS instance per suite — startup is ~13s, so never
+   per-test. `reuseExistingServer` keeps local iteration fast.
 2. **[`global-setup.ts`](./global-setup.ts)** — runs once after the servers are up:
    - creates an account via the CSS account API (`POST /.account/account/` with `{}` — with a
      JSON content-type an empty body 500s), registers a password, creates the pod;

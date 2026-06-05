@@ -19,7 +19,14 @@ echo ""
 echo "📚 Downloading guide files..."
 curl -fsSLO https://raw.githubusercontent.com/jeswr/solid-ai-coding/main/AGENTS.md &
 curl -fsSLO https://raw.githubusercontent.com/jeswr/solid-ai-coding/main/CLAUDE.md &
-wait
+FAILED=0
+for pid in $(jobs -p); do
+  if ! wait "$pid"; then FAILED=1; fi
+done
+if [ "$FAILED" -ne 0 ]; then
+  echo "✗ One or more skill installations failed — re-run this script or install manually (see README)."
+  exit 1
+fi
 echo "✅ Guide files downloaded"
 echo ""
 

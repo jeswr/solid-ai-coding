@@ -132,11 +132,12 @@ Rules:
   `invalid_dpop_proof / iat is not recent enough`, a DPoP proof is carrying a milliseconds `iat`
   (must be seconds). The library gets this right — suspect any second auth layer you added.
 
-#### Mounting in Next.js
+#### Mounting in Next.js (same guard for any SSR framework)
 
 The library is **browser-only** and calls `customElements.define` at module top level with no
 guard — any import reachable during SSR throws and breaks `next build` (`'use client'` alone
-does **not** prevent the server-side module evaluation). Bridge it like this:
+does **not** prevent the server-side module evaluation). In a pure-SPA framework (Vite etc.) a
+plain import is fine. Next.js bridge:
 
 ```tsx
 "use client";
@@ -443,9 +444,11 @@ encounter it.
 
 ### Project bring-up — IN ORDER, before any feature code
 
-1. **Scaffold**: `create-next-app` (TypeScript, App Router, Tailwind, ESLint, `src/` dir,
-   `@/` alias), then `npx shadcn@latest init -b radix -d` (headless; bare `shadcn init`
-   prompts). Node ≥ 24.
+1. **Scaffold your framework.** Default: `create-next-app` (TypeScript, App Router, Tailwind,
+   ESLint, `src/` dir, `@/` alias) + `npx shadcn@latest init -b radix -d` (headless; bare
+   `shadcn init` prompts). Node ≥ 24. **Any framework works** — Part 1 is framework-agnostic
+   (browser-side); if the project prefers Vite/SvelteKit/etc., keep this same checklist and
+   apply the SSR import guard wherever the framework server-renders.
 2. **Install this guide AFTER scaffolding.** ⚠️ `create-next-app` writes its own `AGENTS.md`
    and **overwrites this guide** (observed failure: the agent lost all Solid guidance
    mid-build). Scaffold first, then fetch the guide files / run the setup script — it merges,
@@ -460,8 +463,9 @@ encounter it.
 
 ### Application stack
 
-- **Next.js (App Router) + TypeScript + Tailwind + [shadcn/ui](https://ui.shadcn.com/)**,
-  deployed on **Vercel** (auto-deploy on push; no CI deploy job).
+- **Default stack** (when there's no strong preference otherwise): **Next.js (App Router) +
+  TypeScript + Tailwind + [shadcn/ui](https://ui.shadcn.com/)**, deployed on **Vercel**
+  (auto-deploy on push; no CI deploy job). The rules below generalise to other frameworks.
 - **No hand-rolled UI primitives.** Buttons, dialogs, dropdowns, forms come from shadcn/ui;
   icons from Lucide; forms with `react-hook-form` + `zod`; toasts with `sonner`.
 - **UI quality is a requirement, not a polish phase.** Default output tends to look bland —
