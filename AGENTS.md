@@ -24,6 +24,11 @@ npm install @solid/reactive-authentication @jeswr/fetch-rdf @solid/object @rdfjs
 npm install -D @rdfjs/types @types/n3
 ```
 
+The five runtime libraries go in `dependencies` (plain `npm install`), **not**
+`devDependencies` — only the type packages are dev. And if a `package.json` script references a
+tool (`vitest`, `playwright`), that tool must actually be installed — a script pointing at a
+missing binary is a broken build.
+
 The four Solid libraries are pure ESM (`"type": "module"`); `n3` ships dual CJS/ESM — use ESM
 imports throughout. `n3` must be installed explicitly: `@solid/object` and `@rdfjs/wrapper` need
 an RDF/JS `DataFactory`/`DatasetCore` at runtime but do not bundle one. Code examples below are

@@ -82,6 +82,11 @@ For every feature: **(1)** write the failing Vitest case against the data-layer 
 confirm coverage by — an e2e golden path. A feature without tests is not done. Don't
 snapshot-test UI, don't test shadcn primitives, don't `sleep()` — auto-waits only.
 
+[`feature.spec.example.ts`](./feature.spec.example.ts) is the per-feature e2e template —
+distilled from a real Bob-built TODO app developed against this guide: login error-states
+first (they're the executable form of the `solid-reactive-authentication` UX spec), a
+`beforeEach` login, role/placeholder locators, empty-state → create → persist-across-reload.
+
 ## Gotchas
 
 | Gotcha | Detail |
