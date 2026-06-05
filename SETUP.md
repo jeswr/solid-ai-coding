@@ -10,7 +10,7 @@ The `setup-bob.js` script provides a fully automated, cross-platform setup for S
 - ✅ **Cross-platform** — Works on Windows, macOS, and Linux
 - ✅ **Fast** — Completes in ~1-2 minutes (vs 5-10 minutes sequential)
 - ✅ **Idempotent** — Safe to run multiple times
-- ✅ **CI tested** — Verified on all platforms via GitHub Actions
+- ✅ **Execution-verified** — full clean-room run checked on macOS (2026-06-05); pure Node builtins + npx, no platform-specific code
 
 ## Usage
 

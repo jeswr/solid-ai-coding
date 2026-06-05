@@ -110,7 +110,7 @@ Cursor, Zed, Windsurf, Gemini CLI, GitHub Copilot coding agent, Devin, and a gro
 
 ## Solid skills
 
-This repo bundles seven [Agent Skills](https://agentskills.io/) under [`skills/`](./skills/)
+This repo bundles eight [Agent Skills](https://agentskills.io/) under [`skills/`](./skills/)
 that go deeper than the guide — install them into your agent with:
 
 ```sh
