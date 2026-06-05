@@ -128,7 +128,9 @@ Rules:
 - **Deployed apps publish a static Client Identifier Document** (stable `client_id`, your app's
   name on the consent screen) — the `solid-client-id` skill has the verified template, the
   Next.js hosting recipe (route handler — `public/*.jsonld` 404s in dev), and the provider
-  wiring. Dynamic registration is for quick local spikes.
+  wiring. Dynamic registration is for quick local spikes — and is **required** when a
+  localhost app logs into a *live* server: remote IdPs cannot dereference a `localhost`
+  client-id document (matrix in the skill).
 - Construct `ReactiveFetchManager` before any library captures a reference to `fetch`.
 - **Page reloads**: tokens live in memory only — a hard reload drops them. The next `401`
   re-runs the flow with `prompt=none` first, so while the IdP cookie session lives, re-auth is
@@ -421,6 +423,8 @@ and the troubleshooting table. The three traps to know before you hit them:
 - **CSS owns `:3000`** (issuer map) and `next dev` defaults to `:3000` → run the app on
   `:3200`. The `:3001` ACP instance is off the issuer list — for authenticated ACP testing,
   run the ACP config on `:3000` instead.
+- **CSS starts slowly (~15 s) — avoid restarting it.** `dev.mjs` reuses a running instance;
+  for clean state, create a fresh account (milliseconds) instead of restarting the server.
 
 ### Solid skills
 

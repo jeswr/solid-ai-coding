@@ -64,8 +64,10 @@ starts the app on `:3200`. Wire it as the dev script:
 { "scripts": { "dev": "node scripts/dev.mjs" } }
 ```
 
-`node scripts/dev.mjs --no-app` gives CSS + seeded accounts only. Accounts are in-memory —
-pristine on every restart.
+`node scripts/dev.mjs --no-app` gives CSS + seeded accounts only — run it once in its own
+terminal and leave it up: **CSS takes ~15 s to boot, so avoid restarting it**. The script
+reuses a CSS already on `:3000` (tolerating existing accounts), so app restarts never pay the
+CSS boot cost. For clean state, prefer a fresh account (`createCssAccount`) over a restart.
 
 ## Patterns the harness enables
 

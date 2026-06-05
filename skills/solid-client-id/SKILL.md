@@ -141,13 +141,22 @@ When `clientId` is set the provider **skips dynamic registration** and authentic
 client whose `client_id` is that URL with `token_endpoint_auth_method: "none"`. When `clientId`
 is **absent** it falls back to dynamic registration — so the same provider serves both modes.
 
-## Dev vs prod guidance
+## Where a static client id can — and cannot — work
 
-| Stage | Recommendation |
-|---|---|
-| Quick local dev / spikes | Omit `clientId` → dynamic registration. Nothing to host. |
-| Deployed app (the default) | Publish a Client Identifier Document at a stable HTTPS URL (your Vercel URL, e.g. `https://your-app.vercel.app/clientid.jsonld`) and pass it as `clientId`. Stable identity + your name on the consent screen. |
-| Local against local CSS, testing the static path | `http://localhost:<port>/clientid.jsonld` works **because CSS allows `http://localhost` client ids** — pair with `allowInsecureLoopback: true`. |
+The IdP must **dereference** the `client_id` URL during login. That single fact decides every
+combination:
+
+| App runs at | IdP | Static client id? |
+|---|---|---|
+| `localhost` | **local CSS** | ✅ `http://localhost:<port>/clientid.jsonld` — CSS's explicit localhost exception (verified) |
+| `localhost` | **live server** (solidcommunity.net, PodSpaces, any hosted IdP) | ❌ **Impossible.** The remote IdP cannot reach your `localhost` document, and rejects non-HTTPS client ids anyway. **Use dynamic registration for this combination** — omit `clientId`. |
+| Deployed (HTTPS) | live server | ✅ The production default — `https://your-app.vercel.app/clientid.jsonld` |
+
+So the development progression is: local dev against local CSS may use the static path;
+**initial testing against live servers from localhost runs with dynamic registration**; the
+static client id becomes permanent once the app is deployed to a public HTTPS URL. Don't fight
+this — no tunnel-free workaround exists, and the failure mode (IdP can't fetch the doc) wastes
+hours if you expect it to work.
 
 ## Gotchas
 
@@ -160,4 +169,5 @@ is **absent** it falls back to dynamic registration — so the same provider ser
 | HTTP in production | *"SSL is required for client_id authentication unless working locally."* | Use HTTPS for any non-`localhost` client id. |
 | Stale cache after editing the doc | OP keeps using the old metadata | Lower `cache-control max-age`; bump it back up once stable. |
 | Using published `DPoPTokenProvider` and expecting static client_id | Always dynamically registers; no name on consent | 0.1.2 has no hook — use the bundled `WebIdDPoPTokenProvider` with `clientId`. |
+| Static `localhost` client id against a **live** IdP | Login fails — the IdP cannot fetch your document | Impossible combination; use dynamic registration until the app is deployed (see the matrix above). |
 | Dropped doc in `public/*.jsonld` | 404 in `next dev` | Use a route handler (recipe above). |

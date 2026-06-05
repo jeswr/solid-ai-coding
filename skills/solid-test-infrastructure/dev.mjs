@@ -7,10 +7,17 @@
  *   3. PRINTS THE CREDENTIALS so the developer can log in immediately,
  *   4. starts the app dev server on :3200 (CSS must own :3000 — auth issuer map).
  *
- * Usage:  node scripts/dev.mjs            # CSS + seed + app
- *         node scripts/dev.mjs --no-app   # CSS + seed only (e.g. for manual testing)
+ * CSS is SLOW to start (~13-15s Components.js parse) — avoid restarting it.
+ * This script therefore REUSES a CSS already listening on :3000 (skipping the
+ * boot and tolerating already-seeded accounts), so you can restart the app
+ * freely while CSS stays up. Tip: run `node scripts/dev.mjs --no-app` once in
+ * its own terminal (CSS + seeds, stays up), then start/stop the app however
+ * often you like (`next dev -p 3200` or this script again).
+ *
+ * Usage:  node scripts/dev.mjs            # CSS (reused if up) + seed + app
+ *         node scripts/dev.mjs --no-app   # CSS + seed only (keep this running)
  * package.json:  "dev": "node scripts/dev.mjs"
- * Deps: jose (dev dependency). Stop with Ctrl-C (kills both servers).
+ * Deps: jose (dev dependency). Ctrl-C kills what THIS process started.
  */
 import { spawn } from "node:child_process";
 import { generateKeyPair, exportJWK, SignJWT } from "jose";
@@ -44,6 +51,7 @@ async function jsonPost(url, body, jar) {
   const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body ?? {}) });
   const sc = res.headers.get("set-cookie");
   if (sc) jar.cookie = sc.split(";")[0];
+  if (!res.ok) throw new Error(`${url} -> ${res.status}`); // e.g. already-seeded account on a reused CSS
   return res.json();
 }
 
@@ -98,12 +106,30 @@ async function seed({ pod, name, email, password }) {
   return { webId, email, password, podRoot: `${BASE}/${pod}/` };
 }
 
-console.log("⏳ starting Community Solid Server (in-memory) on :%d …", CSS_PORT);
-start("npx", ["-y", "@solid/community-server@7", "-p", String(CSS_PORT), "-l", "warn"]);
-await up(`${BASE}/`);
+let cssAlreadyUp = false;
+try { await fetch(`${BASE}/`); cssAlreadyUp = true; } catch { /* not running */ }
+if (cssAlreadyUp) {
+  console.log("♻️  reusing the CSS already on :%d (startup is slow — keep it running)", CSS_PORT);
+} else {
+  console.log("⏳ starting Community Solid Server (in-memory) on :%d (~15s) …", CSS_PORT);
+  start("npx", ["-y", "@solid/community-server@7", "-p", String(CSS_PORT), "-l", "warn"]);
+  await up(`${BASE}/`);
+}
 
 const seeded = [];
-for (const account of ACCOUNTS) seeded.push(await seed(account));
+for (const account of ACCOUNTS) {
+  try {
+    seeded.push(await seed(account));
+  } catch {
+    // Account/pod already exists (reused CSS) — the known credentials still apply.
+    seeded.push({
+      webId: `${BASE}/${account.pod}/profile/card#me`,
+      email: account.email,
+      password: account.password,
+      podRoot: `${BASE}/${account.pod}/`,
+    });
+  }
+}
 
 console.log("\n" + "═".repeat(64));
 console.log("  🟢 Solid dev environment ready — TEST ACCOUNTS (in-memory,");

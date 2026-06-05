@@ -21,6 +21,22 @@ Run in-memory (pristine on restart, no filesystem pollution); pin major 7 — th
 name resolves to an 8.0 alpha. Prefer `npm run dev` = the `dev.mjs` orchestrator from the
 `solid-test-infrastructure` skill: CSS + seeded accounts + a printed credentials banner + app.
 
+## ⚠️ CSS is slow to start — avoid restarting it
+
+CSS boot is **~13–15 s** (Components.js dependency-graph parsing), every time. Structure
+development so CSS starts once and stays up:
+
+- `dev.mjs` **reuses** a CSS already on `:3000` (and tolerates already-seeded accounts) — run
+  `node scripts/dev.mjs --no-app` once in its own terminal, then start/stop the app freely.
+- Playwright: `reuseExistingServer` (in the bundled config) keeps one CSS across local runs.
+- Need clean state? **Create a fresh account** (`createCssAccount` fixture — milliseconds)
+  instead of restarting CSS (~15 s). Restart only when the whole in-memory server must reset.
+
+One more dev-loop trap: **a static client id cannot be tested from localhost against a live
+server** — the remote IdP cannot dereference your `localhost` Client Identifier Document. Local
+app + live IdP = dynamic registration; the static path is for local-CSS dev and deployed apps
+(full matrix in the `solid-client-id` skill).
+
 ## Seeded accounts at boot — `--seedConfig`
 
 CSS creates accounts + pods at startup from a JSON file
