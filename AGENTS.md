@@ -11,7 +11,7 @@ library ecosystem has churned and most material you were trained on recommends s
 
 ### The stack
 
-| Concern | Use | Version (June 2026) |
+| Concern | Use | Verified version (June 2026) |
 |---|---|---|
 | Authentication (browser) | `@solid/reactive-authentication` | 0.1.x |
 | Fetch + parse RDF resources | `@jeswr/fetch-rdf` | 0.1.x |
@@ -33,16 +33,18 @@ The four Solid libraries are pure ESM (`"type": "module"`); `n3` ships dual CJS/
 imports throughout. `n3` must be installed explicitly: `@solid/object` and `@rdfjs/wrapper` need
 an RDF/JS `DataFactory`/`DatasetCore` at runtime but do not bundle one. Code examples below are
 verified against the **published** versions stated — not against git HEAD, whose APIs differ.
+These are tested versions, not minimums: newer releases may change APIs — on a version bump,
+re-verify against the installed `.d.ts` before trusting any example.
 
 **Do not use** (these will appear in your training data and in older tutorials):
 
-| Banned | Why |
-|---|---|
-| `@inrupt/solid-client`, `@inrupt/solid-client-authn-*`, `@inrupt/vocab-*` | Different data model — its plain-function API (`getThing`/`setStringNoLocale`/…) doesn't compose with the typed-wrapper pattern used here; mixing the two gives two parallel ways to read/write the same pod |
-| `ldo`, `@ldo/*` | Different shape-codegen paradigm; do not mix with this stack |
-| `@uvdsl/solid-oidc-client-browser` | Mentioned in `@jeswr/fetch-rdf`'s TSDoc as an auth-fetch source — ignore that; auth here is reactive-authentication's global-fetch patch, so you pass no `fetch` to `fetchRdf` |
-| `rdf-parse` | Heavyweight; Solid only needs Turtle + JSON-LD, which `@jeswr/fetch-rdf` handles |
-| Hand-built triples (`DataFactory.quad(...)` assembled inline, string-concatenated Turtle) | Drifts from vocabularies, misses datatype coercion, unreviewable — see "Writing data" |
+| Banned | Why | Use instead |
+|---|---|---|
+| `@inrupt/solid-client`, `@inrupt/solid-client-authn-*`, `@inrupt/vocab-*` | Plain-function data model that doesn't compose with the typed-wrapper pattern; two parallel ways to read/write the same pod | `@solid/object` + `@rdfjs/wrapper`; `@solid/reactive-authentication` |
+| `ldo`, `@ldo/*` | Different shape-codegen paradigm; do not mix | `@rdfjs/wrapper` `TermWrapper` subclasses |
+| `@uvdsl/solid-oidc-client-browser` | Named in `@jeswr/fetch-rdf`'s TSDoc — ignore that | reactive-authentication's global-fetch patch (pass no `fetch` to `fetchRdf`) |
+| `rdf-parse` | Heavyweight; Solid needs only Turtle + JSON-LD | `@jeswr/fetch-rdf` (both formats, content-type dispatched) |
+| Hand-built triples (`DataFactory.quad(...)` inline, string-concatenated Turtle) | Drifts from vocabularies, misses datatype coercion, unreviewable | Typed accessors — see "Writing data" |
 
 ### Getting accurate library documentation
 
@@ -64,6 +66,11 @@ These libraries are 0.x and their READMEs and repos drift from the published pac
    repos' tests and demos track unreleased APIs; trust `node_modules` over the repo.
 3. **Everything else** (`n3`, Next.js, Tailwind, vitest, …) — query context7 normally before
    writing code against it.
+
+If `npx skills add jeswr/solid-ai-coding` fails or your environment has no skills system, the
+skill files are plain markdown — read them at
+[github.com/jeswr/solid-ai-coding/tree/main/skills](https://github.com/jeswr/solid-ai-coding/tree/main/skills)
+or copy them into the project.
 
 ### Authentication — `@solid/reactive-authentication`
 
@@ -393,39 +400,27 @@ npx @solid/community-server@7 -c @css:config/file.json -f ./data
 `ldp/authorization/webacl.json → acp.json` and `util/auxiliary/acl.json → acr.json`. Verified:
 the instance advertises `Link: <…/.acr>; rel="acl"`.)
 
-Create a test account + pod through the UI at `http://localhost:3000` (sign up → create pod),
-or via the account API: `POST /.account/account/` with body `{}` (an empty body 500s; keep the
-cookie) → `GET /.account/` for the control URLs → `POST <password.create>` with
-`{email, password}` → `POST <account.pod>` with `{name}`. Your WebID is
-`http://localhost:3000/<pod>/profile/card#me`.
-
 **The dev environment must be testable the moment it starts**: `npm run dev` launches CSS
 *and* seeds test accounts *and* prints their credentials (WebID / email / password / pod root)
-so the developer can log in immediately — use the verified `dev.mjs` from the
-`solid-test-infrastructure` skill as the dev script. Never hand a developer an app pointing at
-an empty, unseeded CSS.
+— use the verified `dev.mjs` from the `solid-test-infrastructure` skill. Never hand a
+developer an app pointing at an empty, unseeded CSS. Your WebID is
+`http://localhost:3000/<pod>/profile/card#me`.
 
-Three local-dev realities the happy path hides:
+Operational detail lives in [`docs/local-ops.md`](./docs/local-ops.md)
+([raw](https://raw.githubusercontent.com/jeswr/solid-ai-coding/main/docs/local-ops.md)) —
+seeded accounts at boot (`--seedConfig`), the account API recipe, **fixing the bare fresh
+profile** (custom pod templates in `config/pod-templates/`, or client-credentials seeding),
+and the troubleshooting table. The three traps to know before you hit them:
 
-- **Interactive login against local CSS does not work in `@solid/reactive-authentication`
-  0.1.2** — the hard-coded `http://localhost:3000` issuer is rejected by `oauth4webapi`
-  (`only requests to HTTPS are allowed`; no override exists, and HTTPS-ing CSS doesn't help
-  because the issuer URL is fixed). Either use the bundled `WebIdDPoPTokenProvider`
-  (`solid-reactive-authentication` skill, `allowInsecureLoopback: true` — e2e-verified against
-  local CSS), or test interactive login against
-  [solidcommunity.net](https://solidcommunity.net) and drive *local* authenticated reads/writes
-  in tests and seed scripts with a client-credentials DPoP token from the CSS account API.
-- **A fresh CSS pod profile is bare** — only `a foaf:Person; solid:oidcIssuer <…>`. No
-  `foaf:name`, no `pim:storage`, so the guide's profile read yields no name and **no write
-  path**. Seed the profile once (authenticated PUT adding `foaf:name` and
-  `pim:storage <http://localhost:3000/<pod>/>`); take the pod root from the account API's
-  pod-create response — not from the `rel="type"` storage Link header, which is not a
-  discovery mechanism.
-- **CSS owns `:3000`** (the issuer map requires it) and `next dev` defaults to `:3000` too —
-  run the app on another port: `next dev -p 3200`.
-
-`:3001` (the ACP instance) is not on the issuer list — use it for unauthenticated ACP
-behaviour; run the ACP config on `:3000` when you need authenticated ACP testing.
+- **Interactive login against local CSS fails in 0.1.2** (`only requests to HTTPS are
+  allowed`) → the bundled `WebIdDPoPTokenProvider` with `allowInsecureLoopback: true` is the
+  e2e-verified fix (drop-in snippet in the ops doc).
+- **Fresh CSS pod profiles are bare** — no `foaf:name`, no `pim:storage`, hence no write path
+  → seed via pod templates or client-credentials PUT (ops doc; never the `rel="type"` Link
+  header).
+- **CSS owns `:3000`** (issuer map) and `next dev` defaults to `:3000` → run the app on
+  `:3200`. The `:3001` ACP instance is off the issuer list — for authenticated ACP testing,
+  run the ACP config on `:3000` instead.
 
 ### Solid skills
 

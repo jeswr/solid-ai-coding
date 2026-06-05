@@ -40,8 +40,16 @@ they powered full popup-login e2e runs (3/3 stable) and authenticated write-path
    - **seeds the profile** — a fresh CSS pod profile has no `foaf:name` and no `pim:storage`
      (so no display name and no write path); the setup PUTs them plus a photo.
 
-Copy both, adjust the constants (`POD`, `EMAIL`, `PASSWORD`), done. `jose` is the only extra
-dev-dependency.
+3. **[`css-account.ts`](./css-account.ts)** — the per-test account fixture:
+   `createCssAccount({ pod })` returns `{ webId, email, password, podRoot, token, proof }` with
+   the bare profile seeded — fresh-account-per-write-test isolation without restarting CSS
+   (compile-verified; same recipe as global-setup, packaged per call).
+
+Copy what you need, adjust the constants (`POD`, `EMAIL`, `PASSWORD`), done. `jose` is the only
+extra dev-dependency. Alternative to run-time profile seeding: start CSS with the **custom pod
+templates** from this repo's `config/pod-templates/` (+ `config/css-memory-wac-templates.json`)
+and every pod is born with `pim:storage` — see `docs/local-ops.md` for the verified mechanics
+and the `--seedConfig` boot-time account seeding.
 
 ## The dev environment — seeded and ready to log in
 
@@ -69,8 +77,8 @@ pristine on every restart.
   returns `401` unauthenticated — then a passing test *proves* the auth upgrade ran; a false
   pass is impossible.
 - **Write isolation**: in-memory CSS resets on restart; for a pristine pod per suite, restart
-  CSS. For write-heavy suites, create an account per test via the same account-API recipe
-  rather than sharing one pod.
+  CSS. For write-heavy suites, `createCssAccount` (bundled) gives a fresh account + seeded
+  profile + DPoP token per test — no shared-pod interference, no restart.
 - **Popup flows**: capture the OIDC popup with `context.waitForEvent("page")`; CSS login is
   `#email` / `#password` → "Log in" → "Authorize". Ignore the transient `prompt=none` popup
   that closes itself before the interactive one opens.
