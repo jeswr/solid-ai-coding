@@ -73,8 +73,9 @@ or copy them into the project.
 ### Authentication — `@solid/reactive-authentication`
 
 Mental model: there is **no session object and no authenticated-fetch wrapper**.
-`ReactiveFetchManager` patches `globalThis.fetch` once; afterwards you call plain `fetch()` and a
-`401` transparently triggers login and a retry with a DPoP-bound token.
+`ReactiveFetchManager.registerGlobally()` patches `globalThis.fetch` (the constructor does
+**not** — call `registerGlobally()` explicitly in 0.1.3); afterwards you call plain `fetch()`
+and a `401` transparently triggers login and a retry with a DPoP-bound token.
 
 ```html
 <!-- Registered as a side effect of importing the module -->
@@ -92,7 +93,9 @@ const provider = new DPoPTokenProvider(
   ui.getCode.bind(ui),                                 // opens the login popup on demand
 );
 
-new ReactiveFetchManager([provider]); // patches globalThis.fetch — construct ONCE, early
+const manager = new ReactiveFetchManager([provider]);
+manager.registerGlobally(); // patches globalThis.fetch — construct + register ONCE, early
+                            // (0.1.3: the constructor alone does NOT patch the global)
 ```
 
 The typed `querySelector<AuthorizationCodeFlow>` matters: the library does not augment
@@ -124,7 +127,8 @@ Rules:
   wiring. Dynamic registration is for quick local spikes — and is **required** when a
   localhost app logs into a *live* server: remote IdPs cannot dereference a `localhost`
   client-id document (matrix in the skill).
-- Construct `ReactiveFetchManager` before any library captures a reference to `fetch`.
+- Construct `ReactiveFetchManager` and call `registerGlobally()` before any library captures a
+  reference to `fetch`.
 - **Page reloads**: tokens live in memory only — a hard reload drops them. The next `401`
   re-runs the flow with `prompt=none` first, so while the IdP cookie session lives, re-auth is
   silent; don't build your own token persistence.
@@ -149,9 +153,10 @@ export function SolidLogin() {
     // Dynamic import keeps the module out of the server bundle entirely.
     import("@solid/reactive-authentication").then(({ DPoPTokenProvider, ReactiveFetchManager }) => {
       const ui = ref.current as import("@solid/reactive-authentication").AuthorizationCodeFlow;
-      new ReactiveFetchManager([
+      const manager = new ReactiveFetchManager([
         new DPoPTokenProvider(new URL("/callback.html", location.href).toString(), ui.getCode.bind(ui)),
       ]);
+      manager.registerGlobally(); // 0.1.3: required to patch globalThis.fetch
     });
   }, []);
   return <authorization-code-flow ref={ref} />;

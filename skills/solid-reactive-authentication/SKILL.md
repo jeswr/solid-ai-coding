@@ -8,9 +8,9 @@ description: >-
 
 Mental model first (companion guide: [`AGENTS.md`](../../AGENTS.md) §Authentication): there is
 **no session object and no authenticated-fetch wrapper**. `ReactiveFetchManager` patches
-`globalThis.fetch` once at construction; afterwards every plain `fetch()` (including inside
-`@jeswr/fetch-rdf`) transparently upgrades on `401` — find a matching provider, attach a
-DPoP-bound token, retry.
+`globalThis.fetch` when you call `registerGlobally()` (the constructor alone does **not** patch
+it in 0.1.3); afterwards every plain `fetch()` (including inside `@jeswr/fetch-rdf`) transparently
+upgrades on `401` — find a matching provider, attach a DPoP-bound token, retry.
 
 ```sh
 npm install @solid/reactive-authentication   # deps oauth4webapi + dpop come with it
@@ -40,9 +40,10 @@ Setup (full version with typing notes in `AGENTS.md`):
 
 ```ts
 const ui = document.querySelector<AuthorizationCodeFlow>("authorization-code-flow")!;
-new ReactiveFetchManager([
+const manager = new ReactiveFetchManager([
   new DPoPTokenProvider(new URL("/callback.html", location.href).toString(), ui.getCode.bind(ui)),
 ]);
+manager.registerGlobally(); // 0.1.3: the constructor does NOT patch globalThis.fetch — this does
 ```
 
 `/callback.html` (in `public/` for Next.js) contains the line
@@ -92,10 +93,11 @@ this skill:
    authenticated read) against a live local CSS, 3/3 stable — see
    [`webid-token-provider.e2e.md`](./webid-token-provider.e2e.md) for the verification record.
    ```ts
-   new ReactiveFetchManager([
+   const manager = new ReactiveFetchManager([
      new WebIdDPoPTokenProvider(callbackUri, ui.getCode.bind(ui), promptWebIdDialog,
        { allowInsecureLoopback: true }),  // loopback-only; remote issuers stay HTTPS-strict
    ]);
+   manager.registerGlobally(); // 0.1.3: required to patch globalThis.fetch
    ```
 2. **[`login-ux.ts`](./login-ux.ts)** (vitest suite [`login-ux.test.ts`](./login-ux.test.ts),
    9 tests) — the UX helpers the provider composes with: `validateWebId`, `resolveIssuers`,
@@ -130,7 +132,7 @@ Copy both into `src/lib/` and build your UI on them. The behaviour to implement:
 
 | Gotcha | Detail |
 |---|---|
-| Construct `ReactiveFetchManager` **once, early** | It patches the global; libraries that captured `fetch` earlier bypass auth |
+| Construct + `registerGlobally()` **once, early** | The constructor does NOT patch `globalThis.fetch` in 0.1.3 — `registerGlobally()` does; do it before any library captures a `fetch` reference, or those calls bypass auth |
 | Untyped `querySelector` fails to compile | The library doesn't augment `HTMLElementTagNameMap` — use `querySelector<AuthorizationCodeFlow>(…)` |
 | `Unknown issuer` | Host outside the 0.1.2 built-in map — see above |
 | `only requests to HTTPS are allowed` on local login | The 0.1.2 HTTP-issuer wall — use the bundled `WebIdDPoPTokenProvider` with `allowInsecureLoopback: true` for local CSS |
