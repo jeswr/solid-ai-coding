@@ -89,6 +89,16 @@ ws.addEventListener("message", (ev) => {
 });
 ```
 
+**ETag short-circuit — skip the redundant re-fetch.** A modern-protocol change notification can
+carry the changed resource's new ETag in its `state` field (the same value the resource's `ETag`
+header would return). If you cache the ETag from each `fetchRdf` (`@jeswr/fetch-rdf` returns it),
+compare `activity.state` against your cached ETag: equal ⇒ you already have that version, so it's a
+no-op — most usefully, **your own write echoes back as a notification and costs nothing**. Only
+when they differ (or `state` is absent — treat absent as "changed") do you re-fetch. Conditional
+re-fetch (`If-None-Match: <cachedEtag>`) then collapses the common case to a cheap `304`. Don't
+treat `state` as load-bearing across all servers — it's a fast path, not a correctness guarantee;
+fall back to an unconditional re-fetch when it's missing.
+
 CSS 7.x also offers two non-WebSocket channel types — use the same discover-then-request flow,
 swapping the `type`
 ([CSS 7.x docs](https://communitysolidserver.github.io/CommunitySolidServer/7.x/usage/notifications/)):

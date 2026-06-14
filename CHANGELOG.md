@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased] - 2026-06-14
+
+### Changed
+
+- **`solid-server-matrix` skill** — added a **DPoP `ath` enforcement** row + footnote to the
+  compatibility matrix: several deployed apps (Penny, Pod Drive, Tired Bike) send DPoP proofs
+  without the RFC 9449 `ath` claim, so a strict resource server rejects their reads/writes while
+  login still succeeds. (Lesson surfaced during prod-solid-server app-compatibility testing.)
+- **`solid-notifications` skill** — documented the **ETag short-circuit**: a change notification's
+  `state` field can carry the new resource ETag; comparing it against a cached ETag lets a client
+  skip a redundant re-fetch (and makes a self-caused write echo free), falling back to an
+  unconditional re-fetch when `state` is absent. (Lesson from the prod-solid-server notifications
+  ↔ offline-cache integration, where the change frame carries the ETag in `state`.)
+
 ## [Unreleased] - 2026-06-05
 
 ### Added

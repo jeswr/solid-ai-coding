@@ -79,6 +79,7 @@ Branch on these. Each cell carries evidence or is marked **[unverified]**.
 |---|---|---|---|
 | **Auth** | Solid-OIDC + DPoP, strict | Solid-OIDC + DPoP | Older WebID-OIDC; non-conformant discovery [u] |
 | **DPoP `iat` unit** | **Rejects ms** — needs seconds¹ | **Tolerates anything** (ms, 0, future) ¹ | unverified |
+| **DPoP `ath` enforcement** | varies — a strict RS rejects an `ath`-less proof ¹⁰ | tolerant ¹⁰ | unverified |
 | **UMA `as_uri` in `WWW-Authenticate`** | Implemented (per thread) ² | Yes — UMA-compliant ² | No ² |
 | **Access control** | WAC (`.acl`) default ³ | ACP (`.acr`) ³ | WAC (`.acl`) ³ |
 | **Type-index auto-seed** | **No** — app must create + link ⁴ | unverified (commonly seeded) [u] | NSS historically seeds [u] |
@@ -132,6 +133,18 @@ Branch on these. Each cell carries evidence or is marked **[unverified]**.
    [forum/state-of-the-art-for-querying-large-containers/3320](https://forum.solidproject.org/t/state-of-the-art-for-querying-large-containers/3320).
    That thread's OP worked around it by **local caching, not sharding** — sharding is
    a design recommendation, not a quoted fix.
+10. RFC 9449 DPoP defines an optional `ath` claim (base64url SHA-256 of the access
+    token) that binds a proof to one specific token. Several **deployed Solid apps
+    send proofs without `ath`** (observed: Penny, Pod Drive, Tired Bike), so an RS
+    that strictly enforces `ath` rejects their requests — login succeeds but every
+    read/write 401s. ESS-style verifiers tolerate the omission; a strict
+    `oauth4webapi`-based RS does not unless it opts to accept an *absent* (never a
+    *wrong*) `ath`. You won't hit this from the house stack —
+    `@solid/reactive-authentication` is the proof generator, not the verifier — but
+    know it when integrating a third-party app against a strict server, or when your
+    own app talks to a server that enforces it. (Observed during prod-solid-server
+    app-compatibility testing; the RFC-9449 `ath` requirement is
+    [§4.2/§7.1](https://www.rfc-editor.org/rfc/rfc9449#section-4.2).)
 
 ---
 
