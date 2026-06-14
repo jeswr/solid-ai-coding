@@ -75,6 +75,29 @@ Tokens live **in memory only**. A hard reload drops them; the next `401` re-runs
 popup). Do not build your own token persistence, and prefer client-side navigation so the page
 (and its tokens) survive between views.
 
+### Testing proactive refresh with fake timers
+
+If you build a **proactive token-refresh** provider — one that schedules a refresh before
+expiry rather than waiting for a `401` — testing it with vitest fake timers is racy (lesson
+from a prod-solid-server consumer). A refresh cycle awaits real **WebCrypto** (oauth4webapi
+DPoP-proof signing + ES256 sign/verify), which runs on the libuv threadpool and settles on the
+**real** macrotask queue, not the fake clock — so draining with a fixed count of
+`advanceTimersByTimeAsync(0)` rounds is non-deterministic (under load the crypto isn't done
+when assertions run). Instead:
+
+- Expose **observable seams** on the provider, both production no-ops (undefined unless
+  injected): `onProactiveCycleStarted` at the top of the single cycle method *all* trigger
+  paths funnel through (timer fire, backoff retry, visibility-resume), and
+  `onProactiveCycleSettled` in a `finally` once refresh + persist + reschedule has settled.
+- Count STARTED vs SETTLED and **wait on the settled seam, not a time budget**: positive
+  assertions poll for the expected settled count; "nothing more happens" assertions drain
+  until quiescent. Between checks, yield to a `setTimeout` captured *before* `useFakeTimers`
+  so threadpool crypto can settle, bounded by a real wall-clock deadline (pre-captured
+  `Date.now`) that throws with context on overrun. Reset counters per-test.
+- **Pitfall:** count STARTED at the *provider* level, not in the timer wrapper — a
+  resume-triggered cycle that bypasses the timer fires SETTLED without a matching STARTED, and
+  `settle()` then wrongly treats an in-flight refresh as quiescent.
+
 ## Letting users pick their Solid server — behaviour spec + tested code
 
 How should login *feel*? The reference behaviour comes from the Solid browser extension

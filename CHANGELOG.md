@@ -13,6 +13,12 @@
   skip a redundant re-fetch (and makes a self-caused write echo free), falling back to an
   unconditional re-fetch when `state` is absent. (Lesson from the prod-solid-server notifications
   ↔ offline-cache integration, where the change frame carries the ETag in `state`.)
+- **`solid-reactive-authentication` skill** — added a **"Testing proactive refresh with fake
+  timers"** subsection: a proactive-refresh cycle awaits real WebCrypto that settles on the real
+  macrotask queue (not vitest's fake clock), so tests must expose `onProactiveCycleStarted` /
+  `onProactiveCycleSettled` seams and wait on settled-cycle counts (yielding to a pre-fake-capture
+  `setTimeout`, bounded by a real wall-clock deadline) rather than a fixed time budget. (Lesson
+  from a prod-solid-server consumer's `webid-token-provider` tests.)
 
 ## [Unreleased] - 2026-06-05
 
