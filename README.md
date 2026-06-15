@@ -117,7 +117,7 @@ Cursor, Zed, Windsurf, Gemini CLI, GitHub Copilot coding agent, Devin, and a gro
 
 ## Solid skills
 
-This repo bundles ten [Agent Skills](https://agentskills.io/) under [`skills/`](./skills/)
+This repo bundles twelve [Agent Skills](https://agentskills.io/) under [`skills/`](./skills/)
 that go deeper than the guide — install them into your agent with:
 
 ```sh
@@ -133,6 +133,8 @@ npx skills add jeswr/solid-ai-coding -a claude-code -a codex -a bob
 | [`solid-type-index`](./skills/solid-type-index/SKILL.md) | Reading, writing, and bootstrapping Type Index registries (with a compile-verified wrapper implementation) |
 | [`solid-scale-and-sharding`](./skills/solid-scale-and-sharding/SKILL.md) | Collection data without hitting the walls — sharding, index resources, client-side querying |
 | [`solid-notifications`](./skills/solid-notifications/SKILL.md) | Live-sync via the Solid Notifications Protocol and the legacy NSS channel |
+| [`solid-offline`](./skills/solid-offline/SKILL.md) | Instant-load reads: hydrate synchronously from a WebID-scoped durable cache, revalidate in the background (stale-while-revalidate) |
+| [`solid-app-shell`](./skills/solid-app-shell/SKILL.md) | Optimistic, non-blocking pod mutations: update the UI immediately, persist async, save indicator, and the two revert-correctness traps |
 | [`solid-test-infrastructure`](./skills/solid-test-infrastructure/SKILL.md) | Verified test harness (Playwright + local CSS, account seeding, client-credentials fixtures) + the `dev.mjs` seeded dev environment |
 | [`solid-client-id`](./skills/solid-client-id/SKILL.md) | Static Client Identifier Documents — verified template, Next.js hosting recipe, provider wiring (e2e-tested against CSS) |
 | [`accessible-html-links`](./skills/accessible-html-links/SKILL.md) | Native `<a href>` + WCAG link-purpose rules (derived from Solid-website review feedback) |

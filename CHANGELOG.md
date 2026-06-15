@@ -1,5 +1,36 @@
 # Changelog
 
+## [Unreleased] - 2026-06-15 (6)
+
+### Added
+
+- **New `solid-offline` skill** — the offline / instant-load read pattern: hydrate the UI
+  **synchronously** from a durable client cache on mount so the app paints instantly, then
+  revalidate against the pod in the background (stale-while-revalidate); never show a blank/loading
+  screen when a cache exists. Documents the **security** requirement that prevented a real HIGH:
+  the cache MUST be scoped to the authenticated WebID — WebID in BOTH the storage key AND the
+  stored envelope, hydrate only on an identity match (a missing/mismatched WebID is a MISS), clear
+  on **account switch** as well as logout, and VERSION the envelope so a schema change can't
+  resurrect un-scoped legacy entries (stops one signed-in user's private data painting for a
+  different user on the same browser). Notes the eventual home is a service-worker read-through
+  cache + `WebSocketChannel2023` invalidation (the `jeswr/solid-offline` package); the
+  app-level `localStorage`/`IndexedDB` snapshot is the interim pattern. (Learned in
+  `jeswr/solid-issues`: `src/lib/issue-cache.ts` + the WebID-scoped snapshot in
+  `src/lib/use-issues.ts`, commit `ca0c687`.)
+- **New `solid-app-shell` skill** — optimistic, non-blocking pod mutations: update the UI
+  immediately (a kanban card slides to its new column), persist to the pod **asynchronously**
+  without blocking the interaction, show a small non-intrusive "Saving…/Saved" indicator for
+  in-flight writes, and on failure show an error + revert. Documents the two revert-correctness
+  traps that were real review findings: (1) revert only the field(s) the failed write changed onto
+  the CURRENT record (preserving concurrent edits to other fields), and (2) guard against a stale
+  failed write clobbering a NEWER mutation of the same item (track a per-item optimistic
+  state/mutation id; only revert if the current local state still corresponds to the failed
+  mutation). The write-side companion to `solid-offline`. (Learned in `jeswr/solid-issues`:
+  `src/lib/board.ts` `optimisticMove`/`revertMoveIfCurrent`, `src/components/save-indicator.tsx`,
+  `src/lib/use-issues.ts` `persist`, commit `ca0c687`.)
+- Registered both skills in the README skills table (now twelve), the AGENTS.md §Solid skills
+  list, and the SETUP.md skill inventory.
+
 ## [Unreleased] - 2026-06-15 (5)
 
 ### Changed
