@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased] - 2026-06-15
+
+### Changed
+
+- **`solid-fetch-rdf` skill** — added two receiver/server-side AS2 LDN lessons: (1) `parseRdf`
+  rejects `application/activity+json` — normalise to `application/ld+json` before parsing (bytes
+  are JSON-LD-compatible); (2) a JSON-LD `documentLoader` that fetches remote `@context` URLs is
+  an SSRF + reliability hazard on the request path — bundle the AS2 context locally and refuse all
+  remote fetches. (Learned building the LDN suggest-inbox in jeswr/solid-webid-index.)
+
 ## [Unreleased] - 2026-06-14
 
 ### Changed
