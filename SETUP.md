@@ -44,7 +44,7 @@ node setup-bob.js
 ### MCP configuration (`.bob/mcp.json`)
 - context7 MCP server for library documentation queries
 
-### Solid skills (8 skills in `.bob/skills/`)
+### Solid skills (12 skills in `.bob/skills/`)
 - `solid-fetch-rdf` — API reference for @jeswr/fetch-rdf
 - `solid-object` — API reference for @solid/object
 - `solid-reactive-authentication` — Auth API + login UX patterns
@@ -52,6 +52,10 @@ node setup-bob.js
 - `solid-type-index` — Type Index registry operations
 - `solid-scale-and-sharding` — Collection data patterns
 - `solid-notifications` — Live-sync implementation
+- `solid-test-infrastructure` — Verified Playwright + local CSS test harness
+- `solid-client-id` — Stable Client Identifier Documents
+- `solid-offline` — Instant-load reads via a WebID-scoped stale-while-revalidate cache
+- `solid-app-shell` — Optimistic, non-blocking pod mutations
 - `accessible-html-links` — WCAG link accessibility
 
 ### Engineering skills (10 skills)
