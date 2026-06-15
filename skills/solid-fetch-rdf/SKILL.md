@@ -144,16 +144,15 @@ const safeDocumentLoader = async (url: string) => {
 
 const doc = JSON.parse(await req.text());
 
-// toRDF converts to RDF/JS quads via the bundled context — no outbound network calls.
-// The result is an RDF/JS Dataset (n3.Store compatible) you can query with @solid/object.
-const dataset = await jsonld.toRDF(doc, {
-  documentLoader: safeDocumentLoader,
-  format: "application/n-quads",  // get the nquads string if needed, or omit for quad objects
-}) as jsonld.NQuad[];
+// Omit `format` to get native quad objects (not an N-Quads string).
+// toRDF returns jsonld.NQuad[] — no outbound network calls.
+const quads = await jsonld.toRDF(doc, { documentLoader: safeDocumentLoader }) as jsonld.NQuad[];
 
-// If you need an n3.Store, add the quads:
+// Build an n3.Store for querying with @solid/object:
 const store = new Store();
-for (const quad of dataset) store.add(DataFactory.quad(quad.subject, quad.predicate, quad.object, quad.graph));
+for (const q of quads) {
+  store.add(DataFactory.quad(q.subject as any, q.predicate as any, q.object as any, q.graph as any));
+}
 ```
 
 `jsonld.expand` produces expanded JSON-LD objects (not RDF/JS quads); use `jsonld.toRDF` when you
