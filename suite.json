@@ -1,5 +1,4 @@
 {
-  "$schema": "https://solid.example/suite-tracking/suite.schema.json",
   "id": "solid-ai-coding",
   "kind": "tooling",
   "name": "Solid AI Coding",
