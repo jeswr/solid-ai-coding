@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "solid-ai-coding",
+  "kind": "tooling",
+  "name": "Solid AI Coding",
+  "repo": "https://github.com/jeswr/solid-ai-coding",
+  "category": "developer-tooling",
+  "maturity": "beta",
+  "visibility": "public",
+  "stack": {
+    "format": "AGENTS.md guide + vendored Agent Skills",
+    "targets": "Claude Code, OpenAI Codex, IBM Bob (any AGENTS.md-aware agent)",
+    "skills": "Solid client/app skills (solid-auth, solid-wac, solid-fetch-rdf, solid-object, solid-reactive-authentication, solid-notifications, solid-type-index, ...)",
+    "docs": "library stack guidance, verified usage patterns, context7 MCP doc-pull",
+    "setup": "install-skills.sh, setup-bob (Node)"
+  },
+  "dependsOn": [],
+  "federation": null
+}
