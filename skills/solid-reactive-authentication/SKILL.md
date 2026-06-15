@@ -72,8 +72,36 @@ CSS account API for local authenticated test traffic.
 
 Tokens live **in memory only**. A hard reload drops them; the next `401` re-runs the flow with
 `prompt=none` first, so while the IdP cookie session lives, re-auth completes silently (no
-popup). Do not build your own token persistence, and prefer client-side navigation so the page
-(and its tokens) survive between views.
+popup). Prefer client-side navigation so the page (and its tokens) survive between views — and do
+not roll your own *access*-token cache (it expires fast and the in-memory + `prompt=none` path
+already covers in-session recovery).
+
+### Reload-restore: persist the DPoP refresh token, restore via a refresh grant
+
+`prompt=none` only restores silently **while the IdP cookie session is still alive**. For genuine
+session *restore* — closing the tab (without logging out) and reopening later, after the IdP cookie
+has expired or in a browser that drops third-party/IdP cookies (Safari ITP, privacy modes) — that
+path fails and the user is bounced to login, which feels broken. The fix (a suite-wide UX invariant,
+learned across prod-solid-server + jeswr/solid-pod-manager) is to persist the **DPoP-bound refresh
+token**, not the access token, and restore from it on load:
+
+- On login, store the **refresh token** in **IndexedDB**, keyed/scoped to the **WebID** (never
+  `localStorage` — it is synchronous, size-capped, and readable by any same-origin script). The
+  refresh token is DPoP-**bound**, so a leaked copy is useless without the matching private key.
+- On load, before showing a login screen, attempt a silent **refresh-grant fetch** (an
+  `oauth4webapi` refresh-token grant with a fresh DPoP proof) to mint new tokens — **no redirect, no
+  hidden iframe.** Show a brief "restoring…" state; fall back to interactive login only on a genuine
+  refresh failure (revoked/expired refresh token). Land back on the actual page, not the home screen.
+- **Clear the persisted refresh token on logout** (and on a hard refresh failure), and keep it
+  scoped per WebID so switching accounts can't cross the streams.
+- Schedule a **proactive** refresh before access-token expiry (and re-check on `visibilitychange`
+  resume) rather than waiting for a `401` — see the proactive-refresh testing subsection above for
+  how to test that deterministically.
+
+This is what upstream issue [reactive-authentication#15](https://github.com/solid-contrib/reactive-authentication/issues/15)
+("optional `SessionStore` so reloads restore via a refresh grant") tracks; until the library ships
+it, a consumer holds the IndexedDB store itself. (Cited: prod-solid-server auth architecture +
+the Pod-Manager / suite "silent session restore on load" UX invariant, jeswr/solid-pod-manager.)
 
 ### Testing proactive refresh with fake timers
 

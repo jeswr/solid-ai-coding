@@ -1,5 +1,22 @@
 # Changelog
 
+## [Unreleased] - 2026-06-15 (5)
+
+### Changed
+
+- **`solid-reactive-authentication` skill** — added a **"Reload-restore: persist the DPoP refresh
+  token, restore via a refresh grant"** subsection. The existing `prompt=none` advice only restores
+  silently *while the IdP cookie session is alive*; for genuine session restore (reopen a closed tab
+  after the cookie expired, or in Safari ITP / privacy modes that drop IdP cookies) it fails and
+  bounces the user to login. The captured pattern: persist the **DPoP-bound refresh token** (not the
+  access token) in **IndexedDB**, WebID-scoped, cleared on logout; on load attempt a silent
+  **refresh-grant fetch** (no redirect, no iframe) with a brief "restoring…" state, falling back to
+  interactive login only on genuine refresh failure; schedule proactive refresh before expiry. Notes
+  this is what upstream `reactive-authentication#15` (optional `SessionStore`) tracks, and that a
+  consumer holds the IndexedDB store until the library ships it. (Cited: prod-solid-server auth
+  architecture + the Pod-Manager / suite "silent session restore on load" UX invariant,
+  jeswr/solid-pod-manager.)
+
 ## [Unreleased] - 2026-06-15 (4)
 
 ### Changed
