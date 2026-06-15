@@ -1,5 +1,25 @@
 # Changelog
 
+## [Unreleased] - 2026-06-15 (4)
+
+### Changed
+
+- **`solid-fetch-rdf` skill** — added a **"Receiver-side: trusting cross-pod claims (provenance)"**
+  section: when an app consumes data *assigned/shared from other pods*, a foreign pod's claim ("this
+  task is assigned to you", "you are a member") is **untrusted** — anyone who can write that pod can
+  write that triple. Two-tier verify: own-pod data is trusted only when it is **owner-write-only**
+  (a world-/group-appendable resource in your own pod — a public inbox — holds third-party bytes, so
+  it is still foreign for trust); foreign-pod data is shown only when the asserting WebID is an
+  authorised source (a `foaf:knows`
+  contact) **and** the resource resides in that source's *own* advertised `pim:storage` (read from
+  the source's profile) **and is owner-write-only there** (so a third party posting into the
+  friend's public inbox cannot spoof a claim) — closing the confused-deputy gap where a third pod
+  merely names a trusted friend. Fail closed on ambiguity; bound discovery to the authorised set; keep the pure trust
+  decision separate from I/O so it is exhaustively unit-testable. Includes a code-shape sketch and a
+  Gotchas row, with a note that provenance governs *who* may assign (not the network layer — DNS
+  rebinding is a separate guard). (Learned building the Pod Manager assigned-to-me view,
+  jeswr/solid-pod-manager.)
+
 ## [Unreleased] - 2026-06-15 (3)
 
 ### Fixed
