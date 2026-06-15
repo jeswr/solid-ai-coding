@@ -30,11 +30,14 @@ answers. Instead, make mutations **optimistic**:
 
 ```ts
 // optimistic write — local first, persist in the background, revert on failure
-const { next, original } = optimisticMove(items, id, move /* … */);
+// optimisticMove returns three things: the new item LIST, the pre-move record,
+// and the optimistically-moved record (the "expected current state" the revert
+// compares against so a stale failure can't clobber a newer move — see Trap 2).
+const { items: next, original, optimistic } = optimisticMove(items, id, move /* … */);
 if (!original) return;          // no-op (already in that state) — don't show "Saving…"
 setItemsLocal(() => next);      // UI updates instantly
 persist((repo) => repo.applyWrite(id, move)).catch(() => {
-  setItemsLocal((cur) => revertIfCurrent(cur, original, next.optimistic, move));
+  setItemsLocal((cur) => revertIfCurrent(cur, original, optimistic, move));
 });
 ```
 
