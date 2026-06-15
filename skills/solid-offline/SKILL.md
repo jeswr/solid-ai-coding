@@ -120,11 +120,22 @@ records), and its synchronous read is exactly what enables the first-paint hydra
 payload moves to `IndexedDB` at the cost of an async hydrate (then gate `initialLoading` until that
 hydrate settles, rather than seeding state synchronously).
 
+## In-memory cache ≠ cold open — and the value must round-trip
+
+Two distinct layers, often conflated:
+
+- An **in-memory** stale-while-revalidate cache (e.g. an SWR map) survives *in-tab navigation* (home→away→home serves cached, no refetch) — but it is **lost on a full page reload**, so it does **nothing** for the cold-open loading screen. If a view bypasses the in-memory cache entirely (a raw `useEffect`+`fetch` per mount), it refetches even on in-tab navigation.
+- The **durable** snapshot (this skill) is what kills the *cold-open* spinner: persisted, WebID-scoped, hydrated **synchronously** on mount. You usually want both — route every cached read through the in-memory layer, and mirror it to durable.
+
+**Serialization must round-trip — guard the durable boundary with codecs.** A durable cache that does blanket `JSON.stringify`/`JSON.parse` of a generic `T` silently corrupts any value that isn't JSON-plain: a `Date` hydrates back as a **string**, a `Set`/`Map`/`URL`/class instance loses its type — while TypeScript still hands it back typed as `T`, so cold-open rendering breaks or shows wrong data with no error. Make durable persistence **opt-in per cache key with an explicit codec** (`encode → JsonValue`, `decode → T`): a key with **no registered codec is memory-only** (the safe default — it can never silently persist a non-round-trippable shape), and a model with `Date` fields registers a deep ISO-string→`Date` reviver. Test the round-trip through the **real** persisted path (an actual/in-memory `Storage`), not a fake double — a fake bypasses exactly the serialization boundary that bites.
+
 ## Gotchas
 
 | Gotcha | Detail |
 |---|---|
 | Blank flash returns | Hydrating in a `useEffect` paints empty first — seed `useState` with an initializer (sync cache) instead |
+| In-memory cache "fixes" nothing on reload | In-memory survives navigation, NOT cold open — add a durable snapshot for first-paint; route raw-fetch views through the cache so navigation stops refetching |
+| `Date`/`Set`/`Map` hydrate as the wrong type | Blanket `JSON.parse` of generic `T` drifts types silently — opt-in per-key codecs; unregistered key = memory-only; test the real Storage round-trip |
 | One user's data shown to another | The HIGH this skill exists for — WebID in key **and** envelope, hydrate only on identity match, clear on switch+logout, version the envelope |
 | Stale data after logout on a shared device | Logout-only clearing isn't enough — clear on **account switch** too |
 | Legacy entries resurrect after a shape change | Un-versioned envelopes — bump `VERSION` (including when you introduce WebID scoping) so old entries are a MISS |
