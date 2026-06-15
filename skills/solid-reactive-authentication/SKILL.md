@@ -135,6 +135,31 @@ when assertions run). Instead:
   resume-triggered cycle that bypasses the timer fires SETTLED without a matching STARTED, and
   `settle()` then wrongly treats an in-flight refresh as quiescent.
 
+### Detecting login: prove a per-attempt token, never infer from an HTTP status
+
+A tempting "did login succeed?" check is to probe a resource and read the status. **Every
+status-based shortcut is wrong** (each was a real bug, found over three review rounds building
+`create-solid-app`'s auth provider):
+
+- **`401`/`403` ≠ definitive failure.** Treating only non-401/403 as success, then setting the
+  session, is the first trap.
+- **A public `2xx` ≠ success.** Once you reject 401/403, *any* 2xx authenticates — so probing a
+  **public** resource (or a `/` fallback) returns 200 with **no token attached** and falsely marks
+  the user logged in.
+- **A sticky "session established" flag ≠ this attempt.** A provider-level boolean set the first
+  time any `upgrade()` attached a token stays set forever — so a later attempt whose probe got a
+  public 200 (after a prior rejected probe, or logout→re-login) is wrongly accepted.
+
+The correct signal is **whether a token was attached to *this* login attempt's request**. Have the
+token provider expose a **monotonic count** of tokens it has actually minted+attached (incremented
+inside `upgrade()` only after the `Authorization`/`DPoP` headers are set); the UI snapshots the
+count **before** the probe and reads it **after** — a strictly higher count proves an attachment
+*during this attempt* (a prior session's attachments are already in the "before" baseline, so
+nothing stale leaks in). Decision: `2xx + count increased → logged in`; `2xx + no increase →
+public/not logged in`; `401/403 → rejected`; other → error. Keep the decision in a **pure,
+dependency-free function** so it's unit-testable in isolation. (Learned: `jeswr/create-solid-app`,
+3 roborev rounds.)
+
 ## Letting users pick their Solid server — behaviour spec + tested code
 
 How should login *feel*? The reference behaviour comes from the Solid browser extension
