@@ -130,7 +130,7 @@ serves the bundled context and hard-refuses all other remote fetches:
 
 ```ts
 import jsonld from "jsonld";
-import { Store, DataFactory } from "n3";
+import { Store, Parser } from "n3";
 import AS2_CONTEXT from "./contexts/activitystreams.json" assert { type: "json" };
 
 const AS2_CONTEXT_URL = "https://www.w3.org/ns/activitystreams";
@@ -144,15 +144,16 @@ const safeDocumentLoader = async (url: string) => {
 
 const doc = JSON.parse(await req.text());
 
-// Omit `format` to get native quad objects (not an N-Quads string).
-// toRDF returns jsonld.NQuad[] — no outbound network calls.
-const quads = await jsonld.toRDF(doc, { documentLoader: safeDocumentLoader }) as jsonld.NQuad[];
+// Request N-Quads string output (a stable serialisation format); parse with n3 for typed quads.
+// No outbound network calls — context is served from the bundled safeDocumentLoader.
+const nquadsString = await jsonld.toRDF(doc, {
+  documentLoader: safeDocumentLoader,
+  format: "application/n-quads",  // returns string when format is given
+}) as unknown as string;
 
-// Build an n3.Store for querying with @solid/object:
 const store = new Store();
-for (const q of quads) {
-  store.add(DataFactory.quad(q.subject as any, q.predicate as any, q.object as any, q.graph as any));
-}
+const parser = new Parser({ format: "application/n-quads" });
+store.addQuads(parser.parse(nquadsString));
 ```
 
 `jsonld.expand` produces expanded JSON-LD objects (not RDF/JS quads); use `jsonld.toRDF` when you
