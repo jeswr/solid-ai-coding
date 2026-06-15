@@ -93,39 +93,43 @@ const { dataset, etag } = await fetchRdf(resourceUrl);
 | `etag` may be `null` | Some servers (legacy NSS) send no ETag — handle the degraded no-`If-Match` write path (see `solid-server-matrix`) |
 | `dataset` typed as `DatasetCore` | It is an `n3.Store` at runtime, but write code against the RDF/JS interface |
 | README lags | Trust this skill + the `.d.ts` in `node_modules` over the repo README |
-| AS2 `application/activity+json` is rejected by `parseRdf` | ActivityStreams 2.0 senders use `application/activity+json`, which is not in `SUPPORTED_RDF_MEDIA_TYPES`. The bytes are JSON-LD-compatible — normalise the content-type to `application/ld+json` before calling `parseRdf`. (Receiver/server-side; learned building the LDN suggest-inbox in jeswr/solid-webid-index.) |
+| AS2 `application/activity+json` is rejected by `parseRdf`, and `parseRdf` alone is not safe for AS2 server-side | ActivityStreams 2.0 senders use `application/activity+json`, not in `SUPPORTED_RDF_MEDIA_TYPES`. The bytes are JSON-LD-compatible, but AS2 embeds a remote `@context` URL — using `parseRdf` after a content-type normalisation risks a live outbound context fetch (SSRF). Use the underlying `jsonld` layer with a guarded `documentLoader` instead. See the "Receiver-side" section below. (Receiver/server-side; learned building the LDN suggest-inbox in jeswr/solid-webid-index.) |
 
 ## Receiver-side: parsing AS2 LDN notifications safely
 
 _(Server-side / LDN consumer context — not relevant to browser Solid apps.)_
 
 When your server receives an [ActivityStreams 2.0](https://www.w3.org/TR/activitystreams-core/)
-Linked Data Notification (LDN), two traps arise:
+Linked Data Notification (LDN), two traps arise that must **both** be fixed together:
 
-**1. Content-type mismatch.** AS2 senders send `Content-Type: application/activity+json`, but
-`parseRdf` only accepts `application/ld+json` (and Turtle/N-Quads/etc.) — it will throw on the
-raw header. The AS2 bytes are valid JSON-LD; normalise before parsing:
+**1. Content-type mismatch.** AS2 senders use `Content-Type: application/activity+json`, which is
+not in `SUPPORTED_RDF_MEDIA_TYPES` and causes `parseRdf` to throw. The bytes are valid JSON-LD.
+Normalise the content-type using a proper case-insensitive, parameter-aware check:
 
 ```ts
-import { parseRdf } from "@jeswr/fetch-rdf";
+// Extract base media type: lower-case, strip parameters (";charset=..."), trim whitespace.
+function baseMediaType(header: string): string {
+  return header.split(";")[0].trim().toLowerCase();
+}
 
 const rawContentType = req.headers["content-type"] ?? "";
-const effectiveContentType = rawContentType.startsWith("application/activity+json")
-  ? "application/ld+json"
-  : rawContentType;
-
-const dataset = await parseRdf(req.body, effectiveContentType, { baseIRI: req.url });
+const effectiveContentType =
+  baseMediaType(rawContentType) === "application/activity+json"
+    ? "application/ld+json"
+    : rawContentType;
 ```
 
-**2. Remote `@context` fetch = SSRF + reliability hazard.** The AS2 `@context` URL
-(`https://www.w3.org/ns/activitystreams`) is declared in every AS2 document. A JSON-LD parser
-that fetches remote contexts on the request path will make an outbound HTTP call for every
-notification — enabling SSRF and creating a hard dependency on a remote server. Fix both by
-bundling the AS2 context locally and supplying a `documentLoader` that serves it and **hard-refuses
-all other remote fetches**:
+**2. Remote `@context` fetch = SSRF + reliability hazard (and `parseRdf` cannot prevent it).**
+The AS2 `@context` URL (`https://www.w3.org/ns/activitystreams`) is embedded in every AS2
+document. `parseRdf` does **not** expose a `documentLoader` option, so if you call
+`parseRdf(body, "application/ld+json")` directly, the underlying JSON-LD layer will attempt a
+live outbound HTTP fetch for that context on every notification — an SSRF vector and a hard
+runtime dependency on a remote server. **Do not use `parseRdf` directly for AS2 on a server
+request path.** Instead, parse through the underlying JSON-LD layer with a `documentLoader` that
+serves the bundled context and hard-refuses all other remote fetches:
 
 ```ts
-// Bundle once (e.g. vendored JSON file or inline object):
+import jsonld from "jsonld";
 import AS2_CONTEXT from "./contexts/activitystreams.json" assert { type: "json" };
 
 const AS2_CONTEXT_URL = "https://www.w3.org/ns/activitystreams";
@@ -136,11 +140,14 @@ const safeDocumentLoader = async (url: string) => {
   }
   throw new Error(`Remote context fetch refused (SSRF guard): ${url}`);
 };
+
+// Expand the AS2 notification body to canonical JSON-LD quads — no outbound network calls.
+const doc = JSON.parse(await req.text());
+const expanded = await jsonld.expand(doc, { documentLoader: safeDocumentLoader });
 ```
 
-Pass `safeDocumentLoader` to your JSON-LD parser options (`jsonld.expand(doc, { documentLoader })`,
-or the equivalent for `jsonld-streaming-parser`). The `parseRdf` function itself does not expose a
-`documentLoader` option — supply it at the underlying `jsonld` layer if you need full control over
-context resolution.
+Use `parseRdf` only when the incoming body is known to be Turtle or flat JSON-LD with no remote
+context references (e.g. you control the sender). For any untrusted AS2 input on a server, the
+`jsonld` + guarded `documentLoader` path above is the safe default.
 
 (Learned building the LDN suggest-inbox in jeswr/solid-webid-index.)
