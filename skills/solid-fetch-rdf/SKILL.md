@@ -130,6 +130,7 @@ serves the bundled context and hard-refuses all other remote fetches:
 
 ```ts
 import jsonld from "jsonld";
+import { Store, DataFactory } from "n3";
 import AS2_CONTEXT from "./contexts/activitystreams.json" assert { type: "json" };
 
 const AS2_CONTEXT_URL = "https://www.w3.org/ns/activitystreams";
@@ -141,13 +142,23 @@ const safeDocumentLoader = async (url: string) => {
   throw new Error(`Remote context fetch refused (SSRF guard): ${url}`);
 };
 
-// Expand the AS2 notification body to canonical JSON-LD quads — no outbound network calls.
 const doc = JSON.parse(await req.text());
-const expanded = await jsonld.expand(doc, { documentLoader: safeDocumentLoader });
+
+// toRDF converts to RDF/JS quads via the bundled context — no outbound network calls.
+// The result is an RDF/JS Dataset (n3.Store compatible) you can query with @solid/object.
+const dataset = await jsonld.toRDF(doc, {
+  documentLoader: safeDocumentLoader,
+  format: "application/n-quads",  // get the nquads string if needed, or omit for quad objects
+}) as jsonld.NQuad[];
+
+// If you need an n3.Store, add the quads:
+const store = new Store();
+for (const quad of dataset) store.add(DataFactory.quad(quad.subject, quad.predicate, quad.object, quad.graph));
 ```
 
-Use `parseRdf` only when the incoming body is known to be Turtle or flat JSON-LD with no remote
-context references (e.g. you control the sender). For any untrusted AS2 input on a server, the
-`jsonld` + guarded `documentLoader` path above is the safe default.
+`jsonld.expand` produces expanded JSON-LD objects (not RDF/JS quads); use `jsonld.toRDF` when you
+need an RDF dataset to query. Use `parseRdf` only when the incoming body is known to be Turtle or
+flat JSON-LD with no remote context references (e.g. you control the sender). For any untrusted
+AS2 input on a server, the `jsonld` + guarded `documentLoader` path above is the safe default.
 
 (Learned building the LDN suggest-inbox in jeswr/solid-webid-index.)
