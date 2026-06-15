@@ -99,6 +99,51 @@ distilled from a real Bob-built TODO app developed against this guide: login err
 first (they're the executable form of the `solid-reactive-authentication` UX spec), a
 `beforeEach` login, role/placeholder locators, empty-state → create → persist-across-reload.
 
+## PGlite-backed services — boot once per worker, reset between tests
+
+When testing a Postgres-backed Solid service with
+[`@electric-sql/pglite`](https://github.com/electric-sql/pglite) (in-process WASM Postgres) under
+vitest, **do NOT `new PGlite()` per test or per suite** — the WASM boot takes ~1 s each and
+parallel boots thrash CPU, forcing long test timeouts and slow suites. Instead **boot one engine
+per vitest worker and reset the schema (~80 ms) between tests** (drop + recreate or truncate).
+
+In `jeswr/solid-webid-index` this cut the suite from ~683 s cumulative / ~123 s wall-clock to
+~90 s / ~16 s (≈7.5×) and removed the need for inflated per-test timeouts.
+
+**Pattern:**
+
+```ts
+// test/helpers/db.ts  (imported by every test file)
+import { PGlite } from "@electric-sql/pglite";
+
+// Kick off the WASM boot immediately at module load so it overlaps vitest's import phase.
+const enginePromise = PGlite.create();
+
+export async function freshDb(): Promise<PGlite> {
+  const db = await enginePromise;
+  // Drop and recreate the schema — ~80 ms vs ~1 s for a new engine.
+  await db.exec("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
+  await runMigrations(db);   // your app's migration function
+  return db;
+}
+```
+
+```ts
+// my-feature.test.ts
+import { freshDb } from "./helpers/db.js";
+
+let db: PGlite;
+beforeEach(async () => { db = await freshDb(); });
+// No afterAll close — the shared engine lives for the whole worker lifetime.
+```
+
+Rules:
+- **Never `close()` the shared engine** mid-suite; it cannot be reopened.
+- Route every test through one shared `freshDb()` / `freshTestStore()` helper — never call
+  `PGlite.create()` directly in a test file.
+- Each vitest worker gets its own engine (vitest isolates workers) so tests in different files
+  run truly in parallel without contention.
+
 ## Gotchas
 
 | Gotcha | Detail |
@@ -108,3 +153,4 @@ first (they're the executable form of the `solid-reactive-authentication` UX spe
 | Port clash | CSS owns `:3000`; the app runs on `:3200` (see config comments) |
 | Bare fresh profiles | Without the profile seed, `Agent.name` is `undefined` and `storageUrls` is empty — apps appear broken when it's just an unseeded pod |
 | ETag from CSS | Present and stable — exercise the conditional-PUT (`If-Match`/`412`) path in tests; legacy NSS lacks it (see `solid-server-matrix`) |
+| PGlite boot cost | `new PGlite()` per test is ~1 s × N tests; boot once per vitest worker + reset schema between tests instead (see section above) |

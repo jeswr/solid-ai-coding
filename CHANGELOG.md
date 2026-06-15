@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased] - 2026-06-15 (2)
+
+### Changed
+
+- **`solid-test-infrastructure` skill** — added a **"PGlite-backed services — boot once per
+  worker, reset between tests"** section: when testing a Postgres-backed Solid service with
+  `@electric-sql/pglite` under vitest, booting `new PGlite()` per test costs ~1 s × N and
+  thrashes CPU; instead boot one engine per vitest worker at module load and drop+recreate the
+  schema (~80 ms) between tests via a shared `freshDb()` helper. Includes a code sketch.
+  (Learned in jeswr/solid-webid-index: suite went from ~123 s wall-clock to ~16 s, ≈7.5×.)
+  Also added a Gotchas table row summarising the anti-pattern.
+
 ## [Unreleased] - 2026-06-15
 
 ### Changed
