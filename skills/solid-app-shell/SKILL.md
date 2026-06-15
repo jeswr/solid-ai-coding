@@ -106,11 +106,21 @@ when the item's current pending-mutation id still equals the failed write's.
   the server coupled to your write — e.g. a workflow status that also flips an open/closed flag —
   lands without the user waiting on it.
 
+## Reading a pod container into a view (the read side)
+
+Building a list/browser view over a pod container surfaced three patterns worth applying every time (each a roborev finding while building 8 sibling Solid apps):
+
+- **Inject the authenticated `fetch` as a seam, don't hard-wire login.** The view/hook/data-layer take an injectable `fetch` (fall back to the ambient global a reactive-auth shell patches). This builds + unit-tests *now* (stub the fetch) while the real login wires in later — the view is never coupled to the auth flow.
+- **Validate `ldp:contains` child IRIs before you fetch them.** A view that reads each child of a listed container must NOT blindly fetch every IRI the container advertises — a malicious/malformed container can list arbitrary URLs/schemes (an SSRF vector, and it runs before any href-display gate). Require each child to be: an `http(s):` IRI, **same-origin** with the container (compare parsed `URL.origin`, not a raw string prefix — defeats `https://you@evil/…` userinfo + look-alike-prefix tricks), and a **real descendant path** (compare `URL.pathname` under the container's slash-terminated path with a non-empty remainder — so the container itself, even with `?query`/`#fragment`, is rejected). Drop anything else (don't fetch, don't fail the listing).
+- **A data-layer `list()` that swallows 401/403 → `[]` is right for the store but WRONG for a screen.** It makes "you don't have permission" indistinguishable from "empty", so a forbidden container renders "Nothing here" instead of an access-denied state. Wrap it in a thin **UI read facade** that surfaces a typed `AccessDeniedError` (401/403), maps **404 → empty**, **2xx-empty → empty**, else re-throws — without changing the shared store contract other callers depend on. And on an access error during a *reload*, **clear the previously-loaded list + selection** so stale data doesn't linger under the access-denied state.
+
 ## Gotchas
 
 | Gotcha | Detail |
 |---|---|
 | Interaction hangs until the pod answers | The write is blocking — update local state first, persist async, never `await` before the UI updates |
+| Forbidden container shows "empty" | A store `list()` swallowing 401/403→`[]` hides access-denied — wrap in a UI facade that surfaces a typed AccessDenied; clear stale list on a reload that 403s |
+| View fetches an attacker's URL | Don't fetch every `ldp:contains` IRI — require http(s) + same-origin (parsed `origin`) + a real descendant `pathname` before fetching a child |
 | Concurrent edits lost on revert | Trap 1 — revert only the failed write's field(s) onto the **current** record, never replace the whole record with `original` |
 | Newer move undone by an older failure | Trap 2 — capture the optimistic state / a mutation id and revert only if the current state still corresponds to the failed write |
 | Spurious "Saving…" on a no-op drop | A move to the current column changes nothing — detect it (no `original`) and skip the write |
