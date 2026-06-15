@@ -88,6 +88,15 @@ token**, not the access token, and restore from it on load:
 - On login, store the **refresh token** in **IndexedDB**, keyed/scoped to the **WebID** (never
   `localStorage` — it is synchronous, size-capped, and readable by any same-origin script). The
   refresh token is DPoP-**bound**, so a leaked copy is useless without the matching private key.
+- **Persist the matching DPoP key too — this is mandatory, not optional.** A DPoP-bound refresh
+  token can only be redeemed with the **same DPoP key** it was bound to; if the private key is
+  memory-only it dies with the tab and reload-restore fails (`invalid_dpop_proof`). Store the key as
+  a **non-extractable `CryptoKey`** (`crypto.subtle.generateKey(..., /*extractable*/ false, ...)`)
+  in the same IndexedDB store, scoped with the refresh token — IndexedDB can structured-clone a
+  non-extractable `CryptoKey`, so the private-key bytes never become readable by script. Generate
+  the keypair once, reuse it for the original grant and every later refresh, and delete it with the
+  refresh token on logout. (If you instead rely on the library/provider to hold the token, it must
+  supply stable key persistence before this pattern works at all.)
 - On load, before showing a login screen, attempt a silent **refresh-grant fetch** (an
   `oauth4webapi` refresh-token grant with a fresh DPoP proof) to mint new tokens — **no redirect, no
   hidden iframe.** Show a brief "restoring…" state; fall back to interactive login only on a genuine
