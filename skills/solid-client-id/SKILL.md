@@ -32,7 +32,7 @@ Verified against the published `@context`
 ([www.w3.org/ns/solid/oidc-context.jsonld](https://www.w3.org/ns/solid/oidc-context.jsonld)) and
 the Solid-OIDC spec example, and **E2E-driven through a real CSS login** (see the verification
 record in
-[`../solid-reactive-authentication/webid-token-provider.e2e.md`](../solid-reactive-authentication/webid-token-provider.e2e.md)).
+[`solid-reactive-authentication/webid-token-provider.e2e.md`](https://github.com/jeswr/solid-ai-coding/blob/main/skills/solid-reactive-authentication/webid-token-provider.e2e.md)).
 
 ```json
 {
@@ -122,7 +122,7 @@ A static-export site can instead ship a real file at the exact path, served with
 The published `@solid/reactive-authentication` **`DPoPTokenProvider` (0.1.2) has no static
 client_id hook** — its constructor is `(callbackUri, getCodeCallback)`, full stop, and it always
 dynamically registers. Use the bundled
-[`WebIdDPoPTokenProvider`](../solid-reactive-authentication/webid-token-provider.ts) (companion
+[`WebIdDPoPTokenProvider`](https://github.com/jeswr/solid-ai-coding/blob/main/skills/solid-reactive-authentication/webid-token-provider.ts) (companion
 skill `solid-reactive-authentication`), which adds an optional `clientId`:
 
 ```ts

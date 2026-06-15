@@ -7,7 +7,7 @@ description: >-
 # @solid/object — typed wrappers for Solid data
 
 Pre-built `@rdfjs/wrapper` classes for the Solid data you read most (companion guide:
-[`AGENTS.md`](../../AGENTS.md)). **Check here before writing your own wrapper** — profile and
+[`AGENTS.md`](https://github.com/jeswr/solid-ai-coding/blob/main/AGENTS.md)). **Check here before writing your own wrapper** — profile and
 container reading already exist.
 
 ```sh

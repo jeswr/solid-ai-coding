@@ -7,7 +7,7 @@ description: >-
 # @jeswr/fetch-rdf — fetch + parse Solid RDF
 
 The only sanctioned way to GET and parse a Solid RDF resource (companion guide:
-[`AGENTS.md`](../../AGENTS.md)). One HTTP GET + content-type-dispatched parse, returning an
+[`AGENTS.md`](https://github.com/jeswr/solid-ai-coding/blob/main/AGENTS.md)). One HTTP GET + content-type-dispatched parse, returning an
 in-memory dataset plus the validators you need for conditional writes. Never parse RDF inline
 (`new Parser().parse(await res.text())`) and never use `rdf-parse`.
 

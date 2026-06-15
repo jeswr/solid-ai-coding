@@ -39,13 +39,6 @@ const start = (cmd, args) => {
 };
 process.on("SIGINT", () => { children.forEach((c) => c.kill()); process.exit(0); });
 
-const up = async (url) => {
-  for (let i = 0; i < 120; i++) {
-    try { await fetch(url); return; } catch { await new Promise((r) => setTimeout(r, 1000)); }
-  }
-  throw new Error(`timed out waiting for ${url}`);
-};
-
 async function jsonPost(url, body, jar) {
   const headers = { "content-type": "application/json", ...(jar.cookie ? { cookie: jar.cookie } : {}) };
   const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body ?? {}) });
@@ -117,14 +110,46 @@ async function verifySeeded(pod) {
   return ttl.includes("pim:storage") || ttl.includes("pim/space#storage");
 }
 
-let cssAlreadyUp = false;
-try { await fetch(`${BASE}/`); cssAlreadyUp = true; } catch { /* not running */ }
-if (cssAlreadyUp) {
+/**
+ * Probe whether :3000 is actually a Community Solid Server — NOT just "something
+ * answered 200 on /". A stray `next dev` (its default port is also 3000) answers
+ * 200 on "/", so a "GET / -> 200" reuse check false-positives and then seeding
+ * fails downstream with cryptic JSON/HTML errors. Instead hit the CSS-specific
+ * account API (`GET /.account/`, `Accept: application/json`) and require a JSON
+ * response (same guard as global-setup.ts). Returns 'css' | 'occupied' | 'free'.
+ */
+async function probePort() {
+  let res;
+  try {
+    res = await fetch(`${BASE}/.account/`, { headers: { accept: "application/json" } });
+  } catch {
+    return "free"; // nothing listening
+  }
+  const ct = res.headers.get("content-type") ?? "";
+  return res.ok && ct.includes("json") ? "css" : "occupied";
+}
+
+const portState = await probePort();
+if (portState === "css") {
   console.log("♻️  reusing the CSS already on :%d (startup is slow — keep it running)", CSS_PORT);
+} else if (portState === "occupied") {
+  console.error(
+    `✗ something on :${CSS_PORT} is NOT a Community Solid Server (no JSON from /.account/).`,
+  );
+  console.error(
+    `  CSS must own :${CSS_PORT} (the auth issuer map requires it). A stray 'next dev'`,
+  );
+  console.error("  (default port 3000) is the usual culprit — `lsof -i :3000` to find it.");
+  process.exit(1);
 } else {
   console.log("⏳ starting Community Solid Server (in-memory) on :%d (~15s) …", CSS_PORT);
   start("npx", ["-y", "@solid/community-server@7", "-p", String(CSS_PORT), "-l", "warn"]);
-  await up(`${BASE}/`);
+  // Wait for the account API specifically, so we don't proceed until CSS is truly ready.
+  for (let i = 0; i < 120; i++) {
+    if ((await probePort()) === "css") break;
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  if ((await probePort()) !== "css") throw new Error(`CSS did not become ready on ${BASE}`);
 }
 
 const seeded = [];

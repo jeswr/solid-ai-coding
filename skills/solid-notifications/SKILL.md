@@ -6,7 +6,7 @@ description: >-
 
 # Solid notifications — live-sync over the pod
 
-Read the companion [`AGENTS.md`](../../AGENTS.md) first; this skill assumes that stack
+Read the companion [`AGENTS.md`](https://github.com/jeswr/solid-ai-coding/blob/main/AGENTS.md) first; this skill assumes that stack
 (`@solid/reactive-authentication` patches `globalThis.fetch`, so `fetch()` is authenticated).
 Notifications are an **optional** capability — discover support, never assume it. A polling
 fallback (re-`fetchRdf` on an interval, compare ETags) is acceptable for demos and required

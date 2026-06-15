@@ -6,7 +6,7 @@ description: >-
 
 # @solid/reactive-authentication — auth via a patched fetch
 
-Mental model first (companion guide: [`AGENTS.md`](../../AGENTS.md) §Authentication): there is
+Mental model first (companion guide: [`AGENTS.md`](https://github.com/jeswr/solid-ai-coding/blob/main/AGENTS.md) §Authentication): there is
 **no session object and no authenticated-fetch wrapper**. `ReactiveFetchManager` patches
 `globalThis.fetch` when you call `registerGlobally()` (the constructor alone does **not** patch
 it in 0.1.3); afterwards every plain `fetch()` (including inside `@jeswr/fetch-rdf`) transparently

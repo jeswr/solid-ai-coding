@@ -11,7 +11,7 @@ diverge in ways the spec permits or doesn't yet pin down. An app written and
 tested against one server silently depends on that server's behaviour. This
 skill is the differential model: **identify which server you're on, then branch.**
 
-It assumes the house stack from [`AGENTS.md`](../../AGENTS.md):
+It assumes the house stack from [`AGENTS.md`](https://github.com/jeswr/solid-ai-coding/blob/main/AGENTS.md):
 `@solid/reactive-authentication` (auth, DPoP), `@jeswr/fetch-rdf` (fetch+parse),
 `@solid/object` + `@rdfjs/wrapper` (typed RDF), `n3`. Never `@inrupt/*`,
 `@ldo/*`, or hand-built triples. RDF mutations go through `TermWrapper`

@@ -16,7 +16,7 @@ and TDD is possible: write the failing test (unit or e2e), implement, go green, 
 (Install the `test-driven-development` skill from `obra/superpowers` for the discipline; this
 skill is the Solid-specific machinery.)
 
-Two layers, per [`AGENTS.md`](../../AGENTS.md) Part 2 §Testing:
+Two layers, per [`AGENTS.md`](https://github.com/jeswr/solid-ai-coding/blob/main/AGENTS.md) Part 2 §Testing:
 
 | Layer | Tool | Scope |
 |---|---|---|
@@ -69,7 +69,11 @@ starts the app on `:3200`. Wire it as the dev script:
 `node scripts/dev.mjs --no-app` gives CSS + seeded accounts only — run it once in its own
 terminal and leave it up: **CSS takes ~15 s to boot, so avoid restarting it**. The script
 reuses a CSS already on `:3000` (tolerating existing accounts), so app restarts never pay the
-CSS boot cost. For clean state, prefer a fresh account (`createCssAccount`) over a restart.
+CSS boot cost. It detects that reuse by probing the CSS-specific account API
+(`GET /.account/` → JSON), **not** a bare `200` on `/` — so a stray `next dev` (whose default
+port is also `3000`) won't be mistaken for CSS; if something non-CSS owns `:3000` the script
+fails fast with an `lsof -i :3000` hint instead of seeding against the wrong server. For clean
+state, prefer a fresh account (`createCssAccount`) over a restart.
 
 ## Patterns the harness enables
 

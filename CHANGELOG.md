@@ -1,5 +1,24 @@
 # Changelog
 
+## [Unreleased] - 2026-06-15 (3)
+
+### Fixed
+
+- **Vendoring-safe `AGENTS.md` links (jeswr/solid-ai-coding#1).** Seven SKILL.md files linked the
+  companion guide as `[AGENTS.md](../../AGENTS.md)`, which resolves inside this repo but breaks at
+  the standard vendored path (`.agents/skills/<name>/`, where `../../` no longer reaches this
+  repo's root). Rewrote them — and the two `solid-client-id` sibling-skill cross-references — to
+  absolute GitHub URLs (`https://github.com/jeswr/solid-ai-coding/blob/main/…`) so the references
+  survive vendoring. (Surfaced by a Copilot review during vendoring into prod-solid-server#64.)
+- **`solid-test-infrastructure` `dev.mjs` — CSS-reuse detection no longer over-matches
+  (jeswr/solid-ai-coding#1).** The reuse check inferred "a Community Solid Server is already up"
+  from any `200` on `GET /`, so a stray `next dev` (default port 3000) false-positived and seeding
+  then failed downstream with cryptic JSON/HTML errors. Now probes the CSS-specific account API
+  (`GET /.account/`, `Accept: application/json`, require a JSON response — the same guard
+  `global-setup.ts` already uses) and distinguishes css / occupied / free: reuse a genuine CSS,
+  boot one when the port is free, and **fail fast with an `lsof` hint** when something non-CSS owns
+  `:3000`. Removed the now-unused `up()` helper and documented the new probe in the SKILL.
+
 ## [Unreleased] - 2026-06-15 (2)
 
 ### Changed
