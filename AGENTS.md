@@ -129,6 +129,13 @@ Rules:
   client-id document (matrix in the skill).
 - Construct `ReactiveFetchManager` and call `registerGlobally()` before any library captures a
   reference to `fetch`.
+- **Foreign-origin requests must use a `fetch` captured BEFORE `registerGlobally()`.** The global
+  patch upgrades-and-retries any `401` with the user's pod credential when a provider matches the
+  host — correct for the pod, but wrong/unsafe for third-party hosts (a WebID index, `matrix.org`,
+  a Solid forum). **`credentials:"omit"` alone does NOT stop it** (the patch is above the
+  per-request flag). Snapshot `globalThis.fetch` before the patch (an eager module-eval `nativeFetch`
+  const + an idempotent first-wins `captureNativeFetch()` boot hook) and use that pristine reference
+  for foreign origins — the `solid-reactive-authentication` skill has the pattern.
 - **Page reloads**: tokens live in memory only — a hard reload drops them. The next `401`
   re-runs the flow with `prompt=none` first, so while the IdP cookie session lives, re-auth is
   silent; don't build your own token persistence.

@@ -250,6 +250,44 @@ React StrictMode double-mounts, which breaks two login-shell assumptions:
   captured reference points at a dead node and the popup never opens. Update the holder in each mount's
   effect; the flow reads the current one.
 
+### Foreign-origin fetch — the global patch upgrades-and-retries, so capture native `fetch` BEFORE `registerGlobally()`
+
+`registerGlobally()` **replaces `globalThis.fetch`** with a wrapper that, on a `401`, **re-issues
+the request with the user's Solid DPoP/bearer credentials** when a token provider matches the
+request's host. That is correct for the user's own pod — but **wrong and unsafe for THIRD-PARTY /
+foreign origins**: a public WebID index, `matrix.org`, a Solid forum/Discourse, any non-pod public
+API. The app must never risk attaching a pod credential to a foreign host, nor pay the wrapper's
+extra unauthenticated round-trip. The trap (it bit the Pod Manager twice): **`credentials:"omit"`
+alone does NOT prevent the upgrade-and-retry** — the wrapper acts at the **global-fetch layer,
+above** the per-request `credentials` flag, so `fetch(url, { credentials: "omit" })` still goes
+through the patched wrapper and can still trigger the 401→attach-token→retry path.
+
+The fix: capture a snapshot of `globalThis.fetch` **before** `registerGlobally()` patches it, and
+use that pristine reference (bound to the global, with `credentials:"omit"`) for every
+foreign-origin request. Two equivalent capture strategies — use both, belt-and-braces; the
+idempotent boot hook is the more robust:
+
+- A **module-evaluation-time** snapshot in a module imported eagerly from the app root, so it
+  evaluates **before** the session provider's runtime effect calls `registerGlobally()` (an ES
+  module's top-level code runs the first time it is imported). Expose it as a `nativeFetch` const.
+- An **idempotent `captureNativeFetch()` boot hook** (first-call-wins) invoked at the very top of
+  the app root/layout, before the session provider mounts; consumers read it via a
+  `getNativeFetch()` accessor. First-call-wins matters: a later call that happens to run *after*
+  the patch can then never overwrite the good reference.
+
+Both should resolve to the **same backing reference** — never two uncoordinated snapshots. The
+runtime hazard this defeats is real and code-splitting makes it sharp: the patch is installed
+inside a React `useEffect` in the session provider (after an async dynamic import), and a route
+chunk that needs the native fetch (e.g. a community-feeds client) loads lazily **after** the
+patch — so reading `globalThis.fetch` at that point would get the **patched** one.
+
+This is the same "snapshot the pristine fetch once" reflex as the StrictMode singleton above, but
+for a different reason (foreign-origin safety, not logout-restore). Cited: the Pod Manager's
+unified `src/lib/native-fetch.ts` — a single captured reference backing both a `nativeFetch` const
+and `captureNativeFetch()`/`getNativeFetch()` — used by the WebID people-search client AND the
+community-feeds client ([`jeswr/solid-pod-manager`](https://github.com/jeswr/solid-pod-manager),
+the native-fetch unification on `main`).
+
 ### A dynamic-import-defined custom element is not upgraded at first mount — never eager-bind its methods
 
 When the `<authorization-code-flow>` element's **defining module** (`@solid/reactive-authentication`,
@@ -335,6 +373,7 @@ Copy both into `src/lib/` and build your UI on them. The behaviour to implement:
 | Concurrent / double-click login | Single-flight `login()` keyed on requested WebID: same-WebID shares the in-flight promise; different-WebID must reject, never resolve as the wrong identity |
 | Logout re-authenticates as the old user | In-flight async settles after `reset()` and writes stale identity — generation-fence: capture an epoch up front, re-check it **after every await** before mutating state |
 | StrictMode double-patches fetch / dead popup | `registerGlobally()` must snapshot the pristine fetch **once** (a singleton); read the `<authorization-code-flow>` element via a module-level holder updated every mount, not a closed-over first-mount ref |
+| A foreign-origin fetch carries (or risks) the pod credential | The global patch upgrades-and-retries any `401` — **`credentials:"omit"` alone does NOT stop it** (the patch is above the per-request flag). Capture `globalThis.fetch` **before** `registerGlobally()` (eager module-eval snapshot + an idempotent first-wins `captureNativeFetch()` boot hook) and use that pristine ref for third-party hosts (WebID index / matrix.org / forum) |
 | First-load login throws on `ui.getCode` (mock-green) | The auth element's defining module is dynamic-`import()`ed and not upgraded at cold first mount, so `.getCode` is `undefined` — publish a **lazy accessor** `(...a) => ui.getCode(...a)` (read at call time), not `ui.getCode.bind(ui)`; `await customElements.whenDefined(…)` as belt-and-braces |
 | `#autologin/<webid>` deep link does nothing | A popup auto-opened on load has no user gesture and is blocked — use a **full-page** redirect; persist DPoP JWK + PKCE verifier + state + nonce to `sessionStorage` across it; register **both** `/callback.html` and `/` in the client-id `redirect_uris` |
 | Deep-link autologin logs in as the WRONG WebID | A live IdP cookie session for another account satisfies `prompt=none` — **enforce** that the ID-token WebID `webIdsEqual` the requested one and **throw before writing any session/issuer state** on mismatch; validate `state` on the error/abort return too |

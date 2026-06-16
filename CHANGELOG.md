@@ -1,5 +1,26 @@
 # Changelog
 
+## [Unreleased] - 2026-06-16 (4)
+
+### Changed
+
+- **`solid-reactive-authentication` skill** (+ `AGENTS.md` §Authentication) — new subsection + one
+  gotcha: **foreign-origin fetch — capture native `fetch` BEFORE `registerGlobally()`.**
+  `ReactiveFetchManager.registerGlobally()` REPLACES `globalThis.fetch` with a wrapper that, on a
+  `401`, re-issues the request with the user's Solid DPoP/bearer credentials when a token provider
+  matches the request's host — correct for the user's own pod, but wrong and unsafe for THIRD-PARTY
+  origins (a public WebID index, `matrix.org`, a Solid forum/Discourse, any non-pod public API).
+  THE TRAP (bit the Pod Manager twice): **`credentials:"omit"` alone does NOT prevent the
+  upgrade-and-retry** — the wrapper acts at the global-fetch layer, ABOVE the per-request
+  `credentials` flag. Fix: snapshot `globalThis.fetch` BEFORE the patch and use that pristine
+  reference (with `credentials:"omit"`) for foreign origins — two equivalent capture strategies
+  documented (an eager module-evaluation-time `nativeFetch` const, AND an idempotent first-wins
+  `captureNativeFetch()` boot hook read via `getNativeFetch()`; the boot hook is the more robust).
+  One new gotchas-table row + one new rule in `AGENTS.md` §Authentication. (Cited: the Pod Manager's
+  unified `src/lib/native-fetch.ts`, used by the WebID people-search client and the community-feeds
+  client — [`jeswr/solid-pod-manager`](https://github.com/jeswr/solid-pod-manager), the native-fetch
+  unification on `main`.)
+
 ## [Unreleased] - 2026-06-16 (3)
 
 ### Changed
