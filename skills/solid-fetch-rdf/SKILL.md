@@ -95,6 +95,7 @@ const { dataset, etag } = await fetchRdf(resourceUrl);
 | README lags | Trust this skill + the `.d.ts` in `node_modules` over the repo README |
 | AS2 `application/activity+json` is rejected by `parseRdf`, and `parseRdf` alone is not safe for AS2 server-side | ActivityStreams 2.0 senders use `application/activity+json`, not in `SUPPORTED_RDF_MEDIA_TYPES`. The bytes are JSON-LD-compatible, but AS2 embeds a remote `@context` URL — using `parseRdf` after a content-type normalisation risks a live outbound context fetch (SSRF). Use the underlying `jsonld` layer with a guarded `documentLoader` instead. See the "Receiver-side" section below. (Receiver/server-side; learned building the LDN suggest-inbox in jeswr/solid-webid-index.) |
 | A foreign pod's claim about *you* is **untrusted** | `fetchRdf` returns whatever the bytes say. A resource in someone else's pod asserting "this task is assigned to *you*" / "*you* are a member" is an unverified claim — anyone can write that triple. Before acting on cross-pod data, verify provenance: authorised source **and** the data resides in that source's own `pim:storage`. See "Receiver-side: trusting cross-pod claims" below. (Learned building the Pod Manager assigned-to-me view, jeswr/solid-pod-manager.) |
+| A search-index's links (`hydra:next`, `foaf:img`) are attacker-controlled | An external Hydra/TPF index returns index-controlled URLs. Follow `hydra:next` verbatim but **same-origin-only**; fetch through a **pristine fetch + `credentials:"omit"`** (the `registerGlobally()`-patched global retries a `401` with a token — `omit` covers cookies but NOT that DPoP retry); reject non-`https:` image IRIs before an `<img src>`; for existence use a non-redirecting JSON mode and fail closed on 3xx/error. See "Consuming an external Hydra / TPF search index safely" below. (Learned building the solid-webid-index consumer client, 2026-06.) |
 
 ## Receiver-side: parsing AS2 LDN notifications safely
 
@@ -259,3 +260,42 @@ reads still carry the DNS-rebinding risk that a server-side DNS-pinning relay cl
 `solid-auth`) — provenance and SSRF/DNS-pinning are independent guards; apply both.
 
 (Learned building the Pod Manager assigned-to-me view, jeswr/solid-pod-manager.)
+
+## Consuming an external Hydra / TPF search index safely
+
+_(Any app that queries a third-party RDF search/index endpoint — a people/contacts search, a
+federated discovery index — and paginates its results. Browser or server.)_
+
+A Hydra-paged / Triple Pattern Fragments index is *external untrusted RDF*, and the bytes it returns
+include **links it controls** — the next-page cursor and any embedded resource IRIs. Treat both as
+attacker-influenced (learned building the solid-webid-index consumer client, 2026-06):
+
+- **Follow `hydra:next` VERBATIM and SAME-ORIGIN-ONLY.** The cursor is an *opaque* token — pass the
+  whole URL back unmodified (do not reconstruct it from a page number or splice in your own params),
+  but first **refuse a `hydra:next` whose origin differs from the index you queried.** Otherwise the
+  index can walk your client to an arbitrary host (an SSRF pivot, or a credential-leak target). Stop
+  pagination on a cross-origin next.
+- **Never attach credentials cross-origin — and beware the patched global `fetch`.** An index is not
+  your pod, so a DPoP/cookie/`Authorization` header has no business going to it (it leaks the user's
+  token to a third party). Two distinct leaks to close: set **`credentials: "omit"`** to keep cookies
+  off the request; **but that alone is not enough** against `@solid/reactive-authentication` — once
+  `registerGlobally()` has run, a bare `fetch()` **is** the patched global, which retries a `401` by
+  attaching a DPoP-bound token. So if the index ever answers `401`, the patched global would still mint
+  and attach a token to a third-party host. Fetch the index through a **pristine, unpatched `fetch`**
+  captured **before** `registerGlobally()` (or a fetch you know the auth manager does not wrap), not the
+  patched global — `credentials: "omit"` covers cookies, the unpatched fetch covers the DPoP-retry path.
+- **Reject a non-`https:` `foaf:img` (or any URL) before it reaches the UI.** A result's avatar /
+  image IRI is index-controlled; a `javascript:` / `data:` / `http:` value dropped straight into an
+  `<img src>` is an injection / mixed-content vector. Validate the scheme is `https:` first; drop the
+  field otherwise.
+- **For an existence check, prefer a non-redirecting JSON mode and FAIL CLOSED.** "Is this WebID
+  indexed?" should hit an endpoint that answers in-band (a JSON `{exists: …}` or a 200/404 you can
+  read), **not** `fetch(url, { redirect: "manual" })` — an opaque-redirect response is unreadable in
+  browsers (`type: "opaque…"`, status `0`), so you cannot tell a 3xx from anything else. Treat any
+  `3xx`, network error, or parse failure as **"unknown → fail closed"** (do not assert existence),
+  never as a positive.
+
+Keep the URL/scheme checks in a **pure predicate** (same testability discipline as the cross-pod
+provenance predicate above) so they're unit-testable without a live index.
+
+(Learned building the solid-webid-index consumer client, 2026-06.)

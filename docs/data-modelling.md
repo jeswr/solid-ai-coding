@@ -93,6 +93,17 @@ validation contract and machine-readable documentation.
   `sh:nodeKind` to prevent literal-vs-IRI bugs.
 - Validate before write, and on read of untrusted data (`pyshacl` in CI; validate the
   object-mapper output graph in-app).
+- **In-app (JS) validation — always `await` `rdf-validate-shacl`'s `validate()`.** `SHACLValidator`'s
+  `validate(dataGraph)` returns *either* a `ValidationReport` *or* a `Promise<ValidationReport>` —
+  some shapes (those that trigger its async path) hand back a promise. Read `.conforms` off the
+  *un-awaited* promise and you get `undefined`, which branches wrong on exactly the shapes that went
+  async. The direction of the bug depends on the check: the **pass-open** variant is the dangerous
+  one — `if (report.conforms === false)` treats `undefined` as "did not fail" and **accepts invalid
+  data**; `if (!report.conforms)` instead fails *closed* (rejects valid data, since `!undefined` is
+  `true`) — annoying, not a hole; and `report.results.length` just **throws** a `TypeError`
+  (`undefined.length`). Always `const report = await validator.validate(dataGraph)` before reading
+  `.conforms` / `.results`. (Learned wiring the Pod-suite apps onto a shared SHACL-validated task
+  model, 2026-06.)
 - Prefer SHACL over ShEx for new Solid shapes (REC status, broader tooling, what `solid/shapes`
   standardises on).
 

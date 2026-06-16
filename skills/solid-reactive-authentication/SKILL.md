@@ -112,6 +112,43 @@ This is what upstream issue [reactive-authentication#15](https://github.com/soli
 it, a consumer holds the IndexedDB store itself. (Cited: prod-solid-server auth architecture +
 the Pod-Manager / suite "silent session restore on load" UX invariant, jeswr/solid-pod-manager.)
 
+### Deep-link autologin (`#autologin/<webid>` on load) — full-page redirect, enforce the WebID
+
+A "send someone a link that logs them straight in as a known WebID" affordance (the pattern in
+[media-kraken#54](https://github.com/NoelDeMartin/media-kraken/issues/54)) — an `#autologin/<webid>`
+URL fragment that, on load, kicks off a Solid-OIDC login for that WebID — has a small set of
+load-bearing constraints (learned wiring the Pod-suite apps, 2026-06):
+
+- **Full-page redirect, not a popup.** A popup auto-opened on load has **no user gesture**, so the
+  browser's popup blocker kills it — the autologin silently never starts. Drive the login as a
+  **full-page** Solid-OIDC authorization redirect instead (the user *did* click the deep link, but
+  that gesture is on the previous page and does not carry to the auto-open). Register **both**
+  `${origin}/callback.html` (the popup target used by interactive login) **and** `${origin}/` (the
+  full-page redirect lands back on the app root) in the client-id document's `redirect_uris` — miss
+  the root and the IdP rejects the redirect.
+- **Persist the flow secrets across the redirect.** A full-page redirect tears down the page, so the
+  DPoP keypair (exported as a JWK — the *same* key must sign the eventual token-exchange proof), the
+  **PKCE verifier**, the OAuth **state**, and the **nonce** all have to survive in `sessionStorage`
+  and be re-read on return. (`sessionStorage`, not `localStorage`: scoped to the tab, cleared when it
+  closes.)
+- **ENFORCE the requested WebID — fail-closed before writing any state.** On return, the
+  authenticated WebID from the returned **ID token** MUST equal the WebID the deep link asked for —
+  compare with a normalising `webIdsEqual` (trailing-slash / fragment / case-of-host differences are
+  real). If they differ, **throw before any session or issuer state is written.** The trap: a user
+  may already have a *live IdP cookie session for a different account*; without this guard the
+  autologin happily logs them in as the wrong WebID, which is a silent identity-confusion bug. This
+  is the same fail-closed-on-WebID-mismatch principle as the per-attempt-token check above, applied
+  to the deep-link return.
+- **`prompt=none` so it's silent-with-fallback.** Set `prompt=none` on the authorization request so
+  an already-logged-in user is bounced through silently; an OIDC error return (`login_required`,
+  `interaction_required`) is then the signal to fall back to the normal interactive login. **Validate
+  the OAuth `state` on the error/abort return too**, before consuming the persisted record — not only
+  on the success path.
+- **Seed BOTH the session AND the issuer before publishing.** Write the resolved issuer alongside the
+  session so a later silent upgrade / refresh reuses it rather than re-resolving from scratch.
+
+(Learned wiring the Pod-suite apps, 2026-06.)
+
 ### Testing proactive refresh with fake timers
 
 If you build a **proactive token-refresh** provider — one that schedules a refresh before
@@ -299,3 +336,5 @@ Copy both into `src/lib/` and build your UI on them. The behaviour to implement:
 | Logout re-authenticates as the old user | In-flight async settles after `reset()` and writes stale identity — generation-fence: capture an epoch up front, re-check it **after every await** before mutating state |
 | StrictMode double-patches fetch / dead popup | `registerGlobally()` must snapshot the pristine fetch **once** (a singleton); read the `<authorization-code-flow>` element via a module-level holder updated every mount, not a closed-over first-mount ref |
 | First-load login throws on `ui.getCode` (mock-green) | The auth element's defining module is dynamic-`import()`ed and not upgraded at cold first mount, so `.getCode` is `undefined` — publish a **lazy accessor** `(...a) => ui.getCode(...a)` (read at call time), not `ui.getCode.bind(ui)`; `await customElements.whenDefined(…)` as belt-and-braces |
+| `#autologin/<webid>` deep link does nothing | A popup auto-opened on load has no user gesture and is blocked — use a **full-page** redirect; persist DPoP JWK + PKCE verifier + state + nonce to `sessionStorage` across it; register **both** `/callback.html` and `/` in the client-id `redirect_uris` |
+| Deep-link autologin logs in as the WRONG WebID | A live IdP cookie session for another account satisfies `prompt=none` — **enforce** that the ID-token WebID `webIdsEqual` the requested one and **throw before writing any session/issuer state** on mismatch; validate `state` on the error/abort return too |

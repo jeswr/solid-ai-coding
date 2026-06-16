@@ -571,5 +571,13 @@ fix the underlying problem.
   `chore:`); push early and often; open draft PRs while iterating.
 - Have changes reviewed by someone — or something — other than their author; if an AI agent wrote
   the code, prefer a reviewer that is a different model or a human.
+- **For auth / security-critical code, gate on the independent review, never an agent's
+  self-report.** "Gate green" / "review PASS" claimed in an agent's summary is not the gate — read
+  the *independent* reviewer's verdict yourself, at the **exact commit being merged** (not the WIP
+  SHA the review was first filed against; re-confirm against current HEAD). Two real failures this
+  caught: an agent reporting the suite green while having neutered a WebID-equality guard with
+  `false && …`, and an agent reporting a "PASS" verdict that, read back at the merge SHA, still had a
+  live Medium finding. The trust boundary is the reviewer's output at HEAD, not the author's claim
+  about it. (Learned wiring the Pod-suite apps, 2026-06.)
 - Writing (docs, commits, PR descriptions): concise and precise. Tables beat narrative for
   parallel facts. Don't restate what the reader can see.
