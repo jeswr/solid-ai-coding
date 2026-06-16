@@ -114,6 +114,44 @@ Building a list/browser view over a pod container surfaced three patterns worth 
 - **Validate `ldp:contains` child IRIs before you fetch them.** A view that reads each child of a listed container must NOT blindly fetch every IRI the container advertises — a malicious/malformed container can list arbitrary URLs/schemes (an SSRF vector, and it runs before any href-display gate). Require each child to be: an `http(s):` IRI, **same-origin** with the container (compare parsed `URL.origin`, not a raw string prefix — defeats `https://you@evil/…` userinfo + look-alike-prefix tricks), and a **real descendant path** (compare `URL.pathname` under the container's slash-terminated path with a non-empty remainder — so the container itself, even with `?query`/`#fragment`, is rejected). Drop anything else (don't fetch, don't fail the listing).
 - **A data-layer `list()` that swallows 401/403 → `[]` is right for the store but WRONG for a screen.** It makes "you don't have permission" indistinguishable from "empty", so a forbidden container renders "Nothing here" instead of an access-denied state. Wrap it in a thin **UI read facade** that surfaces a typed `AccessDeniedError` (401/403), maps **404 → empty**, **2xx-empty → empty**, else re-throws — without changing the shared store contract other callers depend on. And on an access error during a *reload*, **clear the previously-loaded list + selection** so stale data doesn't linger under the access-denied state.
 
+## Cross-app interop on a shared pod — a consumer must map EVERY producer's `forClass`
+
+Suite apps interoperate by reading and writing the **same pod resources**, discovered through the
+**Type Index** (see the [`solid-type-index`](https://github.com/jeswr/solid-ai-coding/blob/main/skills/solid-type-index/SKILL.md)
+skill for the registration/lookup mechanics). A *producer* app registers its container with
+`solid:instanceContainer` and stamps it with its primary class via `solid:forClass`; a *consumer*
+app — a pod manager, dashboard, or any "browse my data" view — discovers that data by matching those
+`forClass` IRIs into its own categories/views. No shared paths, no app-to-app coupling: the class
+IRI is the contract.
+
+**THE TRAP (a real finding, cross-app interop test 2026-06-16 across
+[`jeswr/pod-docs`](https://github.com/jeswr/pod-docs), [`jeswr/pod-chat`](https://github.com/jeswr/pod-chat),
+and the Pod Manager on one shared pod):** a consumer must map *every* producer's registered
+`forClass` IRI into its own category/view map — otherwise the producer's data is **still discovered**
+(it shows up) but lands in a generic "uncategorised / other" bucket instead of the right view.
+Concretely, pod-docs registers its documents as `pd:Document` (`https://w3id.org/jeswr/pod-docs#Document`);
+the Pod Manager hadn't mapped that IRI, so the docs surfaced under "Other data" until the consumer
+added the class to its Documents category. The data was never lost — just mis-bucketed — which makes
+this easy to miss in a quick look (the app "works", it's just in the wrong place).
+
+So, two standing rules when you **add a producer app** to a suite that shares a pod:
+
+1. **Add its registered class(es) to the consumer's category/view map** in the same change — and
+   include both `https://schema.org/` and legacy `http://schema.org/` forms where the producer might
+   stamp either (pods in the wild use both). For an interim/placeholder namespace
+   (`https://TBD.example/…` pending a frozen vocab base), keep the consumer's map in sync with the
+   producer's vocab module and leave a comment so the freeze updates both.
+2. **Cover each mapping with a regression test** — assert each producer's primary `forClass` resolves
+   to its expected category and is NOT the fallback bucket, so a future edit that drops a mapping
+   fails loudly instead of silently re-bucketing that app's data into "Other".
+
+**The interop-friendly resource shape** that worked across all the suite apps: **one resource per
+item**, Turtle, with a **stable fragment subject** (`<#it>` / a per-item `#…` IRI, not a bare `<>`),
+typed with **standard vocabs** — schema.org, ActivityStreams (`as:Note`), or a domain ontology — and
+**registered per-container in the Type Index** (`solid:instanceContainer` + `solid:forClass`). A
+stable fragment subject lets other apps and the consumer reference the item by a durable IRI across
+edits; standard vocabs are what make the `forClass` match work without bilateral agreement.
+
 ## A prebuild config generator must load `.env` itself — and resolve precedence PER-LAYER
 
 A per-origin host shell often runs a **prebuild script** to emit build-time config — most commonly a
@@ -151,6 +189,7 @@ both real (cited:
 | `.env.local` fails to fully override `.env` | Resolve the origin **per-layer** (`shell → .env.local → .env → default`, first layer that yields one wins), never merge into one dict + pick per-variable — that lets `.env` beat `.env.local` cross-variable |
 | Forbidden container shows "empty" | A store `list()` swallowing 401/403→`[]` hides access-denied — wrap in a UI facade that surfaces a typed AccessDenied; clear stale list on a reload that 403s |
 | View fetches an attacker's URL | Don't fetch every `ldp:contains` IRI — require http(s) + same-origin (parsed `origin`) + a real descendant `pathname` before fetching a child |
+| A producer app's data shows under "Other" | A consumer must map EVERY producer's Type-Index `solid:forClass` IRI into its own category/view map (both `https`/`http` schema.org forms) — an unmapped class is still discovered but mis-bucketed into the fallback (cited: pod-docs' `pd:Document`); add the mapping + a regression test when you add a producer app |
 | Concurrent edits lost on revert | Trap 1 — revert only the failed write's field(s) onto the **current** record, never replace the whole record with `original` |
 | Newer move undone by an older failure | Trap 2 — capture the optimistic state / a mutation id and revert only if the current state still corresponds to the failed write |
 | Spurious "Saving…" on a no-op drop | A move to the current column changes nothing — detect it (no `original`) and skip the write |

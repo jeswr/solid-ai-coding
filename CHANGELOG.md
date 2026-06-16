@@ -1,5 +1,26 @@
 # Changelog
 
+## [Unreleased] - 2026-06-16 (3)
+
+### Changed
+
+- **`solid-app-shell` skill** — new subsection + one gotcha: **cross-app data interop on a shared pod —
+  a consumer must map EVERY producer's `solid:forClass` into its own categories/views.** Suite apps
+  interoperate by reading/writing the SAME pod resources, discovered via the Type Index (a producer
+  registers its container with `solid:instanceContainer` + its primary class via `solid:forClass`; a
+  consumer — a pod manager/dashboard — discovers data by matching those `forClass` IRIs). THE TRAP: a
+  consumer that hasn't mapped a producer's `forClass` IRI still DISCOVERS that data but drops it into a
+  generic "uncategorised/other" bucket instead of the right view (a real finding: pod-docs' `pd:Document`
+  showed under "Other data" until the Pod Manager added the class). So when adding a producer app: add
+  its class(es) to the consumer's category map (both `https`/`http` schema.org forms) AND cover each with
+  a regression test that asserts it resolves to the expected category, not the fallback. Also captures the
+  interop-friendly resource shape that worked across all the suite apps (one-resource-per-item Turtle with
+  a stable `#it`/fragment subject, standard vocabs — schema.org / ActivityStreams / domain ontologies —
+  registered per-container in the Type Index). Cross-references the `solid-type-index` skill for the
+  registration mechanics. (Cited: cross-app interop test 2026-06-16 across
+  [`jeswr/pod-docs`](https://github.com/jeswr/pod-docs), [`jeswr/pod-chat`](https://github.com/jeswr/pod-chat),
+  and the Pod Manager on one shared pod.)
+
 ## [Unreleased] - 2026-06-16 (2)
 
 ### Changed
