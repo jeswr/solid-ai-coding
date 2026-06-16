@@ -234,6 +234,20 @@ in-memory dataset through these wrappers, serialise the whole dataset with
   ([forum](https://forum.solidproject.org/t/questions-about-apps-behavior-regarding-missing-data-in-users-pod/5277.json)).
 - A registration may carry an `solid:instance` *and* be one of several entries
   for a class; treat `locate()` as returning a list.
+- **SolidOS interop: the de-facto on-the-wire term is what the SHIPPING pane
+  reads/writes — verify against the pane source, not the spec/ns-doc.** Type-Index
+  discovery only tells you *where* another app's data is; to actually read/write it
+  you must match the predicates that app uses, and a shipping SolidOS pane can
+  differ from its own ns-doc. Concretely: the SolidOS schedule pane
+  ([`solid-panes/src/schedule/schedulePane.ts`](https://github.com/SolidOS/solid-panes/blob/main/src/schedule/schedulePane.ts))
+  reads **and** writes **`sched:availabilty`** (misspelled, no second `i`), whereas
+  the W3C ns-doc (`http://www.w3.org/ns/pim/schedule#`) defines `sched:availibility`
+  (a *different* misspelling). To interoperate you must **write the term the live
+  pane reads** (`sched:availabilty`) and **read tolerantly** (accept both spellings).
+  General rule: for SolidOS interop, the de-facto term shipping in the pane wins over
+  the spec — `grep` the pane source for the predicate before you hard-code it.
+  (Verified 2026-06 against the live `solid-panes` `main`; learned building the Pod
+  Manager `/schedule` interop, jeswr/solid-pod-manager `src/lib/schedule.ts`.)
 
 ## Cross-references
 

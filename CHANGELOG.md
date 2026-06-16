@@ -1,5 +1,26 @@
 # Changelog
 
+## [Unreleased] - 2026-06-17 (1)
+
+### Changed
+
+- **`solid-object` + `solid-type-index` skills** — two SolidOS-interop lessons from shipping the Pod
+  Manager `/schedule` SolidOS `sched:` poll interop (jeswr/solid-pod-manager `src/lib/schedule.ts`):
+  - **`solid-object`** — new gotchas-table row: **`@rdfjs/wrapper`'s `LiteralAs.date` is STRICT and
+    throws on foreign data.** `LiteralAs.date` calls `ensureDatatype(term, xsd:date, xsd:dateTime)`,
+    so it throws `LiteralDatatypeError` on a date-only string typed `xsd:string`, an untyped/plain
+    literal (N3 types these `xsd:string`), or a loose value from another serialiser. When parsing RDF
+    a **different** app wrote (interop), read the lexical value with `LiteralAs.string` and parse
+    leniently (`new Date(value)` + validity check), never `LiteralAs.date` — else one malformed/foreign
+    literal throws and breaks the whole parse. (Verified against `@rdfjs/wrapper` 0.34.0 `LiteralAs`;
+    cited SolidOS `cal:dtstart` date-only literals read in `schedule.ts`.)
+  - **`solid-type-index`** — new caveat: **SolidOS interop sometimes means matching a MISSPELLED
+    predicate; verify against the SHIPPING pane, not the spec.** The de-facto on-the-wire term is what
+    the running SolidOS pane reads/writes, which can differ from the ns-doc. The schedule pane
+    (`solid-panes/src/schedule/schedulePane.ts`) reads+writes `sched:availabilty` (misspelled), NOT the
+    ns-doc's `sched:availibility`. Write the term the live pane reads; read tolerantly (accept both).
+    (Verified 2026-06 against `solid-panes` `main`; cited `schedule.ts` + the pane source.)
+
 ## [Unreleased] - 2026-06-16 (5)
 
 ### Changed
