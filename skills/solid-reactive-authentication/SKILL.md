@@ -213,6 +213,22 @@ React StrictMode double-mounts, which breaks two login-shell assumptions:
   captured reference points at a dead node and the popup never opens. Update the holder in each mount's
   effect; the flow reads the current one.
 
+### A dynamic-import-defined custom element is not upgraded at first mount — never eager-bind its methods
+
+When the `<authorization-code-flow>` element's **defining module** (`@solid/reactive-authentication`,
+whose top-level `customElements.define("authorization-code-flow", …)` upgrades the element) is
+**code-split behind a dynamic `import()`** — the right thing to do in Next.js / a host shell, so the
+auth chunk doesn't block the bundle — then on a **cold first mount** `define(…)` has not run yet, the
+element is **not upgraded**, and `ui.getCode` is `undefined`. So `ui.getCode.bind(ui)` (or any eager
+read of `.getCode`) at mount time **throws** and breaks first-load login. A fetch-mock test harness
+hides this completely — there's no real dynamic import to race. Fix: publish a **lazy accessor** to the
+holder — `(...args) => ui.getCode(...args)` reads the method at **call** time (login time, after the
+import has resolved and the element is upgraded), preserving the element as `this`. As belt-and-braces
+for a very-early login racing the import, `await customElements.whenDefined("authorization-code-flow")`
+before the call if `ui.getCode` is still not a function (`whenDefined` resolves immediately once
+registered). **Never access `.getCode` at mount** — only at call time. (Cited:
+[`jeswr/pod-docs@6e589ca`](https://github.com/jeswr/pod-docs/commit/6e589ca).)
+
 ## Letting users pick their Solid server — behaviour spec + tested code
 
 How should login *feel*? The reference behaviour comes from the Solid browser extension
@@ -282,3 +298,4 @@ Copy both into `src/lib/` and build your UI on them. The behaviour to implement:
 | Concurrent / double-click login | Single-flight `login()` keyed on requested WebID: same-WebID shares the in-flight promise; different-WebID must reject, never resolve as the wrong identity |
 | Logout re-authenticates as the old user | In-flight async settles after `reset()` and writes stale identity — generation-fence: capture an epoch up front, re-check it **after every await** before mutating state |
 | StrictMode double-patches fetch / dead popup | `registerGlobally()` must snapshot the pristine fetch **once** (a singleton); read the `<authorization-code-flow>` element via a module-level holder updated every mount, not a closed-over first-mount ref |
+| First-load login throws on `ui.getCode` (mock-green) | The auth element's defining module is dynamic-`import()`ed and not upgraded at cold first mount, so `.getCode` is `undefined` — publish a **lazy accessor** `(...a) => ui.getCode(...a)` (read at call time), not `ui.getCode.bind(ui)`; `await customElements.whenDefined(…)` as belt-and-braces |

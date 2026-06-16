@@ -1,5 +1,32 @@
 # Changelog
 
+## [Unreleased] - 2026-06-16 (2)
+
+### Changed
+
+- **`solid-reactive-authentication` skill** — new gotcha + subsection: **a custom element defined by a
+  DYNAMIC `import()` is not upgraded at first mount, so don't eager-bind its methods.** When the auth
+  `<authorization-code-flow>` element's defining module (`@solid/reactive-authentication`) is code-split
+  behind a dynamic import, on a COLD first mount `customElements.define(…)` hasn't run yet → `ui.getCode`
+  is `undefined` → `ui.getCode.bind(ui)` THROWS and breaks first-load login (a fetch-mock harness hides
+  it). Fix: publish a LAZY accessor `(...args) => ui.getCode(...args)` that reads the method at CALL time
+  (after the import resolves), with `await customElements.whenDefined("authorization-code-flow")` as
+  belt-and-braces. Never access `.getCode` at mount. One new gotchas-table row. (Cited:
+  [`jeswr/pod-docs@6e589ca`](https://github.com/jeswr/pod-docs/commit/6e589ca).)
+- **`solid-app-shell` skill** — new subsection + two gotchas: **a prebuild config generator (e.g. the
+  per-origin `clientid.jsonld` emitter) must load `.env`/`.env.local` itself and resolve precedence
+  PER-LAYER.** A script that runs BEFORE Vite/the bundler doesn't get its `.env` loading, so reading only
+  `process.env` makes a plain `npm run build` silently bake a localhost/dev origin into the production
+  client-id document (whose served URL IS the `client_id` → broken login at the deployed subdomain). Load
+  `.env` then `.env.local` via Node's built-in `util.parseEnv` (no dep; Node ≥ 20.12), and resolve the
+  origin in strict priority `shell(non-empty) → .env.local → .env → dev-default`, each layer picking its
+  OWN `APP_ORIGIN`/`VITE_APP_ORIGIN`, first layer that yields one wins — do NOT merge the files into one
+  dict + pick per-variable (that lets a `.env` value beat a `.env.local` value of the OTHER variable, so
+  `.env.local` fails to fully override `.env` cross-variable). Guard the file-writing `main()` behind a
+  realpath `isInvokedDirectly()` check so the resolvers are unit-test-importable side-effect-free. (Cited:
+  [`jeswr/pod-photos@bd490ac`](https://github.com/jeswr/pod-photos/commit/bd490ac),
+  [`jeswr/pod-music@2c3dcb3`](https://github.com/jeswr/pod-music/commit/2c3dcb3).)
+
 ## [Unreleased] - 2026-06-16
 
 ### Changed

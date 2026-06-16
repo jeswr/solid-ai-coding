@@ -114,11 +114,41 @@ Building a list/browser view over a pod container surfaced three patterns worth 
 - **Validate `ldp:contains` child IRIs before you fetch them.** A view that reads each child of a listed container must NOT blindly fetch every IRI the container advertises — a malicious/malformed container can list arbitrary URLs/schemes (an SSRF vector, and it runs before any href-display gate). Require each child to be: an `http(s):` IRI, **same-origin** with the container (compare parsed `URL.origin`, not a raw string prefix — defeats `https://you@evil/…` userinfo + look-alike-prefix tricks), and a **real descendant path** (compare `URL.pathname` under the container's slash-terminated path with a non-empty remainder — so the container itself, even with `?query`/`#fragment`, is rejected). Drop anything else (don't fetch, don't fail the listing).
 - **A data-layer `list()` that swallows 401/403 → `[]` is right for the store but WRONG for a screen.** It makes "you don't have permission" indistinguishable from "empty", so a forbidden container renders "Nothing here" instead of an access-denied state. Wrap it in a thin **UI read facade** that surfaces a typed `AccessDeniedError` (401/403), maps **404 → empty**, **2xx-empty → empty**, else re-throws — without changing the shared store contract other callers depend on. And on an access error during a *reload*, **clear the previously-loaded list + selection** so stale data doesn't linger under the access-denied state.
 
+## A prebuild config generator must load `.env` itself — and resolve precedence PER-LAYER
+
+A per-origin host shell often runs a **prebuild script** to emit build-time config — most commonly a
+per-subdomain Client Identifier Document (`clientid.jsonld`, see the `solid-client-id` skill), whose
+served URL *is* the `client_id`, so a wrong origin = broken login at the deployed subdomain. Two traps,
+both real (cited:
+[`jeswr/pod-photos@bd490ac`](https://github.com/jeswr/pod-photos/commit/bd490ac),
+[`jeswr/pod-music@2c3dcb3`](https://github.com/jeswr/pod-music/commit/2c3dcb3)):
+
+- **A script that runs BEFORE the bundler does not get the bundler's `.env` loading.** Vite (etc.) loads
+  `.env`/`.env.local` for *your app code*, not for a Node script you run in a prebuild step — so reading
+  only `process.env` means a plain `npm run build` (no shell var set) silently bakes the **localhost/dev**
+  origin into the production document, even though `.env.example` claims those files drive it. Load them
+  yourself: `parseEnv` from `node:util` (zero deps; needs Node ≥ 20.12) over `.env` then `.env.local`.
+- **Resolve the origin PER-LAYER, in strict priority — do NOT merge the files into one dict.** Order:
+  `shell (non-empty) → .env.local → .env → dev-default`; each layer picks its *own* origin var (e.g.
+  `APP_ORIGIN`, else `VITE_APP_ORIGIN`), and the **first layer that yields one wins**. Merging the two
+  files into a single dict and then picking per-variable (`merged.APP_ORIGIN ?? merged.VITE_APP_ORIGIN`)
+  is **wrong**: if `.env` sets `APP_ORIGIN` and `.env.local` sets the *other* var (`VITE_APP_ORIGIN`),
+  the merged dict keeps both keys and the `APP_ORIGIN`-first pick returns the `.env` value — so `.env`
+  beats `.env.local` cross-variable, and `.env.local` fails to fully override `.env`. Per-layer
+  resolution avoids that. (Treat an **empty** shell var `APP_ORIGIN=` as *absent*, so it doesn't suppress
+  a file value.)
+- **Guard the file-writing `main()` behind a realpath `isInvokedDirectly()` check** (compare
+  `realpathSync(process.argv[1])` to this module's `realpathSync(fileURLToPath(import.meta.url))`), and
+  export the pure resolver — so the precedence logic is **unit-test-importable side-effect-free** (no
+  filesystem write, no `process.env` read) while still running on direct invocation.
+
 ## Gotchas
 
 | Gotcha | Detail |
 |---|---|
 | Interaction hangs until the pod answers | The write is blocking — update local state first, persist async, never `await` before the UI updates |
+| `npm run build` bakes a localhost client-id | A prebuild config script doesn't get the bundler's `.env` loading — load `.env`/`.env.local` yourself via `node:util` `parseEnv`; a wrong client-id origin = broken login at the deployed subdomain |
+| `.env.local` fails to fully override `.env` | Resolve the origin **per-layer** (`shell → .env.local → .env → default`, first layer that yields one wins), never merge into one dict + pick per-variable — that lets `.env` beat `.env.local` cross-variable |
 | Forbidden container shows "empty" | A store `list()` swallowing 401/403→`[]` hides access-denied — wrap in a UI facade that surfaces a typed AccessDenied; clear stale list on a reload that 403s |
 | View fetches an attacker's URL | Don't fetch every `ldp:contains` IRI — require http(s) + same-origin (parsed `origin`) + a real descendant `pathname` before fetching a child |
 | Concurrent edits lost on revert | Trap 1 — revert only the failed write's field(s) onto the **current** record, never replace the whole record with `original` |
