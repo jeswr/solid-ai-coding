@@ -139,6 +139,15 @@ Rules:
 - **Page reloads**: tokens live in memory only — a hard reload drops them. The next `401`
   re-runs the flow with `prompt=none` first, so while the IdP cookie session lives, re-auth is
   silent; don't build your own token persistence.
+- **Silent session restore (tab closed + reopened, after the IdP cookie expires) uses the shared,
+  audited [`@jeswr/solid-session-restore`](https://github.com/jeswr/solid-session-restore)** —
+  WebID-scoped IndexedDB DPoP refresh-token persistence + a pure `decideSilentRestore` + a DPoP-bound
+  `restoreSession` grant. **Don't hand-roll the store per app**; apps do thin wiring only
+  (request `offline_access`; confirm-then-persist after `webIdsEqual`; persist-before-publish;
+  ordered, awaited, single-flighted logout; `shouldDropRememberedPointer` reconciliation). The DPoP
+  **private** key stays non-extractable but the **public** key MUST be `extractable: true` (it is
+  serialised into the proof JWK, RFC 9449 §4.2) — the `solid-reactive-authentication` skill has the
+  recipe + the adversarial test pattern.
 - Debugging note: if auth works on PodSpaces but CSS rejects with
   `invalid_dpop_proof / iat is not recent enough`, a DPoP proof is carrying a milliseconds `iat`
   (must be seconds). The library gets this right — suspect any second auth layer you added.

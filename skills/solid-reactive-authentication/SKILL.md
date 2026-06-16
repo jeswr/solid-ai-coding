@@ -108,9 +108,85 @@ token**, not the access token, and restore from it on load:
   how to test that deterministically.
 
 This is what upstream issue [reactive-authentication#15](https://github.com/solid-contrib/reactive-authentication/issues/15)
-("optional `SessionStore` so reloads restore via a refresh grant") tracks; until the library ships
-it, a consumer holds the IndexedDB store itself. (Cited: prod-solid-server auth architecture +
-the Pod-Manager / suite "silent session restore on load" UX invariant, jeswr/solid-pod-manager.)
+("optional `SessionStore` so reloads restore via a refresh grant") tracks. Until the library ships
+it, **don't hand-roll the store per app** — use the shared, audited package below. (Cited:
+prod-solid-server auth architecture + the Pod-Manager / suite "silent session restore on load" UX
+invariant, jeswr/solid-pod-manager.)
+
+### Silent session restore is a SHARED, AUDITED package — not a per-app copy
+
+The reload-restore mechanics above are **easy to get subtly, silently wrong** (a missed guard
+leaks a credential across accounts, or a logout race re-authenticates the just-logged-out user),
+so the security invariants belong in tests at **one** package boundary, not re-derived in every
+app. That package is **[`@jeswr/solid-session-restore`](https://github.com/jeswr/solid-session-restore)**
+(`npm install github:jeswr/solid-session-restore#main` — committed `dist/`, ESM). It owns three
+things and apps do **thin wiring only**, never their own crypto/persistence:
+
+```ts
+import {
+  IndexedDbSessionStore,   // WebID-scoped IndexedDB: { refresh_token + non-extractable DPoP CryptoKeyPair }, keyed by ISSUER
+  restoreSession,          // the DPoP-bound refresh_token grant (real oauth4webapi grant + fresh DPoP proof)
+  decideSilentRestore,     // a PURE fail-closed decision: given inputs → restore | login(reason)
+  webIdsEqual,             // normalising WebID compare (trailing-slash / fragment / host-case)
+  shouldDropRememberedPointer, // WebID-aware pointer reconciliation (see below)
+  isInvalidGrantError,     // distinguishes a dead refresh token (→ login) from a transient failure (→ keep)
+  forgetPersisted, clearPersisted,
+} from "@jeswr/solid-session-restore";
+```
+
+The package's value is that the invariants are **tested at the boundary, adversarially** — each
+guard's test verifies it genuinely FAILS when the guard is removed, then restores it.
+
+**DPoP key extractability — the sharp one (RFC 9449 §4.2), it bit two apps and survived multiple
+reviews.** A DPoP-bound refresh token is only redeemable with the **same DPoP key**, so the key
+must persist — but persist it *correctly*:
+
+- The DPoP keypair's **PRIVATE** key must be **non-extractable** (never durably store an
+  exfiltratable private key). The **PUBLIC** key must be **`extractable: true`** —
+  `oauth4webapi`/`dpop` serialise the public key into the DPoP proof header's JWK, so a
+  `publicKey.extractable === false` throws `"key is not extractable"` and breaks proof generation
+  (→ silent restore silently broken).
+- For the **popup-login** key persisted directly in IndexedDB, this is automatic:
+  `crypto.subtle.generateKey({ ...alg }, /*extractable*/ false, ["sign","verify"])` already yields
+  a **non-extractable private + an always-extractable public** half, and IndexedDB
+  structured-clones the non-extractable `CryptoKey` so the private bytes never become script-readable.
+  (This is exactly what `@jeswr/solid-session-restore`'s `IndexedDbSessionStore` persists.)
+- The **full-page-redirect** path is the trap: it must EXPORT the key (`extractable: true`) to
+  survive the navigation via `sessionStorage`, then RE-IMPORT it on return — and the re-import MUST
+  be **private `false` / public `true`**, NOT both `true`. Leaving the private key extractable after
+  re-import is a hygiene regression (an exfiltratable private key in memory).
+- **Test it:** the persisted/re-imported **public** key `exportKey`s to a JWK; the **private** key's
+  `exportKey` **rejects**.
+
+**The thin-wiring adoption recipe (each line is a hard-won guard):**
+
+- **Request `offline_access`** on ALL interactive login paths — popup AND redirect — or there is no
+  refresh token to persist.
+- **Confirm-then-persist.** Persist the refresh credential only AFTER a fail-closed
+  `webIdsEqual(authenticatedWebId, requestedWebId)` match. Persist-before-match leaks a credential
+  into the wrong account's store.
+- **`webid-mismatch` teardown ORDER:** `reset()` → `forgetPersisted` → clear pointer. (Tear the live
+  session down before deleting the durable credential before clearing the public pointer.)
+- **Generation-fence the store wrapper.** A logout racing the grant must not be undone by the
+  package's internal rotated-token write-back — fence the store so a write for a superseded
+  generation is dropped (same epoch discipline as the `reset()` rule below).
+- **Logout = single-flighted + ordered + AWAITED:** `reset()` → invalidate the restore latch →
+  **await** the durable delete → publish logged-out UI. Never fire-and-forget the delete.
+- **Pointer (localStorage) writes/clears are best-effort/guarded, but durable `forgetPersisted` runs
+  INDEPENDENTLY** — a pointer-clear throw must not skip credential cleanup.
+- **Persist the credential BEFORE publishing the logged-in UI** (symmetric with logout's
+  delete-before-publish) — else a tab closed in the race window misses the persist and restore fails.
+- **WebID-AWARE pointer reconciliation (`shouldDropRememberedPointer`).** The store is keyed by
+  **ISSUER**, so a "present" credential on a SHARED issuer may belong to a PRIOR account on that
+  issuer — require the stored WebID `webIdsEqual` the requested one before trusting it. On a transient
+  store-read failure, write THIS login's pointer; never blind-keep a possibly-stale one.
+
+**Test pattern (lesson, applies to your wiring too):** drive the **real** package `restoreSession`
+over a **stubbed `fetch`/transport** — do NOT mock `oauth4webapi`, which would hide the grant and
+the DPoP proof entirely. Make every guard **adversarial**: assert it FAILS with the guard removed,
+then restore it. (Cited: `@jeswr/solid-session-restore` — `IndexedDbSessionStore` persists the
+non-extractable DPoP keypair, `restoreSession.test.ts` drives the real refresh grant over a stubbed
+transport; validated across the 7 vite pod-apps + the package extraction from the pod-mail pilot.)
 
 ### Deep-link autologin (`#autologin/<webid>` on load) — full-page redirect, enforce the WebID
 
@@ -377,3 +453,5 @@ Copy both into `src/lib/` and build your UI on them. The behaviour to implement:
 | First-load login throws on `ui.getCode` (mock-green) | The auth element's defining module is dynamic-`import()`ed and not upgraded at cold first mount, so `.getCode` is `undefined` — publish a **lazy accessor** `(...a) => ui.getCode(...a)` (read at call time), not `ui.getCode.bind(ui)`; `await customElements.whenDefined(…)` as belt-and-braces |
 | `#autologin/<webid>` deep link does nothing | A popup auto-opened on load has no user gesture and is blocked — use a **full-page** redirect; persist DPoP JWK + PKCE verifier + state + nonce to `sessionStorage` across it; register **both** `/callback.html` and `/` in the client-id `redirect_uris` |
 | Deep-link autologin logs in as the WRONG WebID | A live IdP cookie session for another account satisfies `prompt=none` — **enforce** that the ID-token WebID `webIdsEqual` the requested one and **throw before writing any session/issuer state** on mismatch; validate `state` on the error/abort return too |
+| Silent restore breaks with `"key is not extractable"` | The DPoP **public** key must be `extractable: true` (oauth4webapi serialises it into the proof JWK, RFC 9449 §4.2) while the **private** key stays non-extractable. `generateKey(…, false, …)` gets this right; the full-page-redirect export/re-import must re-import private `false` / public `true` (NOT both `true`). Test: public exports to JWK, private `exportKey` rejects |
+| Hand-rolled per-app session restore | Use the shared, audited **[`@jeswr/solid-session-restore`](https://github.com/jeswr/solid-session-restore)** (WebID-scoped IndexedDB store + pure `decideSilentRestore` + DPoP-bound `restoreSession`) — apps do thin wiring (confirm-then-persist, ordered awaited logout, `shouldDropRememberedPointer` reconciliation), never their own crypto/persistence |

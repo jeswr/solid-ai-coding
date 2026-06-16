@@ -1,5 +1,35 @@
 # Changelog
 
+## [Unreleased] - 2026-06-16 (5)
+
+### Changed
+
+- **`solid-reactive-authentication` skill** (+ `AGENTS.md` §Authentication) — new subsection + two
+  gotchas: **silent session restore (DPoP refresh-token) is a SHARED, AUDITED package, not a per-app
+  copy.** The reload-restore mechanics are easy to get subtly, silently wrong (a missed guard leaks a
+  credential across accounts, or a logout race re-authenticates the just-logged-out user), so the
+  security invariants belong in tests at ONE package boundary —
+  **[`@jeswr/solid-session-restore`](https://github.com/jeswr/solid-session-restore)** (WebID-scoped
+  IndexedDB DPoP refresh-token persistence + a PURE `decideSilentRestore` decision + a DPoP-bound
+  `restoreSession` grant); apps do thin wiring only. Captures: (1) the package boundary +
+  confirmed exports (`decideSilentRestore`, `restoreSession`, `webIdsEqual`, `shouldDropRememberedPointer`,
+  `forgetPersisted`, `IndexedDbSessionStore`, `isInvalidGrantError`); (2) **the DPoP key-extractability
+  sharp edge (RFC 9449 §4.2 — bit two apps, survived multiple reviews):** the DPoP PRIVATE key must be
+  non-extractable but the PUBLIC key MUST be `extractable: true` (oauth4webapi serialises it into the
+  proof JWK, so `publicKey.extractable === false` throws `"key is not extractable"` → silent restore
+  silently broken); `generateKey(…, false, …)` gets the popup-key case right, the full-page-redirect
+  export/re-import must re-import private `false` / public `true` (NOT both `true`); test = public
+  exports to JWK, private `exportKey` rejects; (3) the thin-wiring adoption recipe (request
+  `offline_access` on popup AND redirect; confirm-then-persist after `webIdsEqual`; `webid-mismatch`
+  teardown order; generation-fenced store; single-flighted + ordered + AWAITED logout; pointer
+  best-effort but durable `forgetPersisted` independent; persist-before-publish; WebID-aware pointer
+  reconciliation); (4) the test pattern — drive the REAL package `restoreSession` over a STUBBED
+  transport (never mock `oauth4webapi`), every guard adversarial (fails with the guard removed, then
+  restored). Two new gotchas-table rows + one new rule in `AGENTS.md` §Authentication. (Cited:
+  `@jeswr/solid-session-restore` — `IndexedDbSessionStore` persists the non-extractable DPoP keypair,
+  `restoreSession.test.ts` drives the real refresh grant over a stubbed transport; validated across the
+  7 vite pod-apps + the package extraction from the pod-mail pilot.)
+
 ## [Unreleased] - 2026-06-16 (4)
 
 ### Changed
