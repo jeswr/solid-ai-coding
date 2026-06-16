@@ -160,6 +160,59 @@ public/not logged in`; `401/403 → rejected`; other → error. Keep the decisio
 dependency-free function** so it's unit-testable in isolation. (Learned: `jeswr/create-solid-app`,
 3 roborev rounds.)
 
+### Correlating the probe correctly — the re-wrap, CORS, and concurrency constraints
+
+The per-attempt token count above tells you *whether* a token was minted; a standalone login shell
+also has to correlate "the probe I just fired" with *this* `upgrade()` call inside a custom
+`TokenProvider`. Four constraints make the obvious approaches wrong (each a real bug, driven to zero
+roborev findings over four rounds building a login host shell — cited:
+[`jeswr/pod-docs@283134b`](https://github.com/jeswr/pod-docs/commit/283134b),
+[`jeswr/create-solid-app@adb85e6`](https://github.com/jeswr/create-solid-app/commit/adb85e6)):
+
+- **The manager re-wraps the request — per-request side channels do not survive.** `ReactiveFetchManager`'s
+  patched fetch does `new Request(input, init)` **before** calling `provider.upgrade(request)`. So a
+  `WeakMap<Request, …>` keyed on object identity, or an expando/symbol property on the Request, is
+  **dropped** by the copy — only `url` / `method` / `headers` survive. (Confirm at runtime:
+  `new Request(orig) !== orig`.) Anything you need the provider to read must live on those three.
+- **Don't tag the probe with a custom HEADER — it breaks cross-origin login.** A custom request header
+  (`x-…-probe-id`) makes a cross-origin pod request "non-simple", so the browser sends a **CORS
+  preflight** that many Solid pods reject — the probe fails before the 401/upgrade path ever runs, and
+  login is broken in production. A fetch-mock test harness hides this entirely (no real preflight).
+- **Correlate with an unforgeable URL FRAGMENT, and strip it from the DPoP `htu`.** A `#probe-<uuid>`
+  fragment **survives** the re-wrap (it's on `.url`), is **never sent on the wire** (RFC 3986 §3.5 —
+  client-side only, so no preflight), and an unrelated same-base-URL request can't carry it. **But**
+  the `dpop` package uses its `htu` argument verbatim while a server computes `htu` from the
+  query/fragment-stripped request URI (RFC 9449 §4.2) — so compute the DPoP `htu` from
+  **scheme+authority+path only** (strip query *and* fragment), while keeping the full fragment-bearing
+  URL for in-process correlation. Forget this and every probe fails `invalid_dpop_proof` on `htu`.
+- **Single-flight `login()`, keyed on the requested WebID.** Without it a double-clicked or concurrent
+  login opens overlapping probes that overwrite each other's correlation or duplicate popups. Share the
+  one in-flight promise on a **same-WebID** re-entry; a **different-WebID** concurrent login must
+  **reject cleanly** (never resolve as the wrong identity).
+
+### `reset()` / logout must generation-fence ALL in-flight async — re-checked AFTER every await
+
+Logout (and starting a new login) clears cached provider state, but async already in flight —
+issuer resolution, the session `upgrade()`, `DPoP.generateProof()` — can settle **later** and write
+`#issuer` / `#sessions` / `#authenticatedWebId` / the token count for a **stale** identity, silently
+re-authenticating as the just-logged-out user. Fix: a monotonic **generation/epoch** that `reset()`
+advances; every async op **captures the generation up front AND re-checks it immediately after each
+await**, before mutating any provider state — a superseded op writes nothing (reject with a typed
+reset error). The re-check must be **after** the await, not only before it (that's the half that bites
+— a check before a 300 ms crypto await is stale by the time the await resolves). (Same commits.)
+
+### StrictMode: idempotent global patch + a module-level popup holder
+
+React StrictMode double-mounts, which breaks two login-shell assumptions:
+
+- **`registerGlobally()` must be idempotent.** Capture the **pristine** `fetch` exactly once in a
+  module-level singleton — a second mount must not snapshot the **already-patched** fetch as "pristine"
+  (logout would then restore a patched fetch) and must not stack a second patch.
+- **Read the `<authorization-code-flow>` element through a module-level holder updated on EVERY mount** —
+  never close over the first mount's element. StrictMode immediately unmounts that first element, so a
+  captured reference points at a dead node and the popup never opens. Update the holder in each mount's
+  effect; the flow reads the current one.
+
 ## Letting users pick their Solid server — behaviour spec + tested code
 
 How should login *feel*? The reference behaviour comes from the Solid browser extension
@@ -223,3 +276,9 @@ Copy both into `src/lib/` and build your UI on them. The behaviour to implement:
 | `only requests to HTTPS are allowed` on local login | The 0.1.2 HTTP-issuer wall — use the bundled `WebIdDPoPTokenProvider` with `allowInsecureLoopback: true` for local CSS |
 | CSS-only auth failure `iat is not recent enough` | A *second* auth layer sending ms-unit DPoP `iat`; this library is correct — remove the other layer |
 | Worker mode | `ReactiveFetchWorkerManager` registers a repo-relative worker path; treat as not production-ready in 0.1.x |
+| Probe correlation lost in the provider | The manager does `new Request(input, init)` before `upgrade()` — a `WeakMap<Request>`/expando/symbol is dropped; only `url`/`method`/`headers` survive |
+| Cross-origin login breaks (prod only, mock-green) | A custom probe **header** triggers a CORS preflight pods reject — correlate with a `#probe-<uuid>` URL **fragment** (never sent on the wire) instead |
+| Every probe fails `invalid_dpop_proof` on `htu` | `dpop` uses `htu` verbatim but the server strips query+fragment (RFC 9449 §4.2) — compute `htu` from scheme+authority+path only; keep the fragment URL only for in-process correlation |
+| Concurrent / double-click login | Single-flight `login()` keyed on requested WebID: same-WebID shares the in-flight promise; different-WebID must reject, never resolve as the wrong identity |
+| Logout re-authenticates as the old user | In-flight async settles after `reset()` and writes stale identity — generation-fence: capture an epoch up front, re-check it **after every await** before mutating state |
+| StrictMode double-patches fetch / dead popup | `registerGlobally()` must snapshot the pristine fetch **once** (a singleton); read the `<authorization-code-flow>` element via a module-level holder updated every mount, not a closed-over first-mount ref |

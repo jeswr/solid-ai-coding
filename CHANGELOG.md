@@ -1,5 +1,29 @@
 # Changelog
 
+## [Unreleased] - 2026-06-16
+
+### Changed
+
+- **`solid-reactive-authentication` skill** — added a **"Correlating the probe correctly"** subsection
+  (plus `reset()`/logout generation-fencing and StrictMode lifecycle subsections), capturing the
+  concrete mechanism behind the existing "prove a per-attempt token, never an HTTP status" rule when
+  building a **standalone login shell** over the WebID DPoP token provider. The four correlation
+  constraints: (1) `ReactiveFetchManager` does `new Request(input, init)` before `upgrade()`, so a
+  per-request `WeakMap`/expando/symbol side channel is dropped — only `url`/`method`/`headers` survive;
+  (2) a custom probe **header** triggers a CORS preflight that pods reject (breaks cross-origin login in
+  prod; fetch-mock hides it) — correlate with an unforgeable `#probe-<uuid>` URL **fragment** instead
+  (never sent on the wire, RFC 3986 §3.5); (3) the `dpop` package uses `htu` verbatim but a server
+  strips query+fragment (RFC 9449 §4.2), so compute the DPoP `htu` from scheme+authority+path only while
+  keeping the fragment URL for in-process correlation; (4) single-flight `login()` keyed on the requested
+  WebID (same-WebID shares the promise, different-WebID rejects, never resolves as the wrong identity).
+  Plus: `reset()`/logout must **generation-fence** all in-flight async (capture an epoch up front,
+  re-check **after every await** before mutating `#issuer`/`#sessions`/`#authenticatedWebId`/the token
+  count — else a late settle re-auths the just-logged-out user); and StrictMode needs an idempotent
+  `registerGlobally()` (snapshot pristine `fetch` once) + a module-level `<authorization-code-flow>`
+  holder updated every mount (never a closed-over first-mount ref the double-mount kills). Eight new
+  gotchas-table rows. (Learned driving a login host shell to zero roborev findings over four rounds:
+  `jeswr/pod-docs@283134b`, `jeswr/create-solid-app@adb85e6`.)
+
 ## [Unreleased] - 2026-06-15 (6)
 
 ### Added
