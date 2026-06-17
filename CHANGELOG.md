@@ -1,5 +1,27 @@
 # Changelog
 
+## [Unreleased] - 2026-06-17 (5)
+
+### Changed
+
+- **`solid-app-shell` skill** — two refinements to the prior (4) `@jeswr/solid-elements` adoption
+  sections, learned in the pod-mail/pod-money/pod-docs "safe form" back-port across the vite pod-apps,
+  2026-06-17. (1) CSS exclusion-selector trap: the previously-suggested `button:not([data-app-shell-control])`
+  exclusion is itself a trap — a **bare `:not([attr])` leaks the attribute selector's specificity**,
+  raising the base button from `(0,0,1)` to `(0,1,1)`, which then out-ranks the app's own *class-only*
+  host overrides (`.foo-link`/`.foo-cancel` at `(0,1,0)`) and repaints them with the base look (a real
+  visual regression, reviewer-flagged Medium). Fix: wrap it in `:where()` — `button:where(:not([data-app-shell-control]))`
+  carries **zero** specificity, so the base stays `(0,0,1)` and the class-only overrides win again;
+  pod-docs landed the `:where()` form. Recommend a source-level test rejecting BOTH the unscoped global
+  and the bare-`:not()` form. (2) `@lit/react` test caveat: clarifies that `reflect: true` does **not**
+  make the React-wrapper prop render under **vitest/jsdom** — `@lit/react` resolves its package's
+  **`node`** export condition there, whose `NODE_MODE` build SKIPS the `useLayoutEffect` that forwards
+  reactive props, so a React-layer assertion (`render(<Loading label/>)` then check the label) can't
+  pass even with `reflect: true`. It's an environment artifact, not a component bug; assert the contract
+  on the **raw custom element** (set the property directly → reflected attribute + rendered `::part`).
+  Adds the specificity-leak explanation + `:where()` code, the vitest-`node`-condition explanation +
+  raw-element test code, and two matching gotchas-table rows.
+
 ## [Unreleased] - 2026-06-17 (4)
 
 ### Changed

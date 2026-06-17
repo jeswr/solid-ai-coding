@@ -297,30 +297,50 @@ generic "Loading"). It looks like the prop "didn't take" with no error.
 
 Three fixes, in order of preference:
 
-- **(a) Make the element's string props `reflect: true`** (declare them as attributes) so the wrapper
-  forwards them as attributes — the durable fix, in the library.
+- **(a) Make the element's string props `reflect: true`** (declare them as attributes) so a real
+  browser forwards them as attributes — the durable fix, in the library. (But `reflect: true` does
+  **not** make the prop reach the element under `@lit/react`'s React wrapper in **vitest/jsdom** —
+  see the test caveat below.)
 - **(b) Until then, consume via the RAW custom element with a DOM attribute**, not the React-wrapper
   property: `<jeswr-loading label="Signing you in…">` rather than the wrapped `<Loading label=…>`.
-- **(c) In unit tests (jsdom), assert via the rendered shadow root / `::part` / the reflected
-  attribute / `aria-label` — NOT the raw property value**, which is unreliable in jsdom — and validate
-  real prop-forwarding in a browser.
+- **(c) In unit tests, drive the RAW custom element and assert via the rendered shadow root /
+  `::part` / the reflected attribute (`reflect: true`) / `aria-label` — NOT the raw property and NOT
+  a React-wrapper assertion** — and validate real prop-forwarding in a browser.
 
 ```tsx
-// (a) library-side: a reflected property is forwarded by @lit/react
+// (a) library-side: a reflected property is forwarded by @lit/react in a real browser
 @property({ type: String, reflect: true }) label = "Loading";
 
 // (b) consumer workaround until (a) lands — raw element + DOM attribute, not the wrapper property
 <jeswr-loading label="Signing you in…" />
 
-// (c) test against the rendered DOM, not the property
-expect(el.shadowRoot!.querySelector('[part="label"]')!.textContent).toBe("Signing you in…");
-// (or assert the reflected attribute / aria-label) — NOT expect(el.label)
+// (c) test against the RAW element's rendered DOM, not the React wrapper and not the property
+//     (cast: createElement returns HTMLElement — use the exported element type if you have it)
+const el = document.createElement("jeswr-loading") as HTMLElement & { label: string; updateComplete: Promise<unknown> };
+el.label = "Signing you in…"; document.body.append(el);
+await el.updateComplete;
+expect(el.getAttribute("label")).toBe("Signing you in…");                               // reflected attribute
+expect(el.shadowRoot!.querySelector('[part="label"]')!.textContent).toBe("Signing you in…"); // shadow part
+// NOT: render(<Loading label="Signing you in…"/>) then assert the label — it won't reach the element in vitest
 ```
+
+**Why a React-wrapper assertion can't pass in vitest (clarifies fix (a)): the wrapper's
+prop-forwarding effect is compiled OUT under the `node` export condition.** `@lit/react`'s
+`createComponent` forwards reactive props to the element in a `useLayoutEffect` (its `NODE_MODE`
+build). Under vitest/jsdom, `@lit/react` resolves its package's **`node`** export condition, whose
+build **skips that property-forwarding effect** — so `render(<Loading label="…"/>)` then asserting
+the rendered label **cannot pass in vitest even with `reflect: true`**: the prop simply never reaches
+the element. This is an **environment artifact, not a component bug** (it works in a real browser).
+So `reflect: true` is necessary for attribute-based consumption, but it does **not** make the
+`<Wrapper prop>` render under the wrapper in vitest — assert the contract on the **raw element**
+(set the property directly, then check the reflected attribute + the rendered `::part`).
 
 (Learned adopting [`@jeswr/solid-elements`](https://github.com/jeswr/solid-elements) across the vite
 pod-apps, 2026-06-17 — a `Loading` label set via the `@lit/react` wrapper was dropped under React 19
 and the spinner showed the generic fallback; reflecting the prop / using the raw element + DOM
-attribute fixed it.)
+attribute fixed it. The vitest `node`-condition caveat came from the same pod-mail/pod-money safe-form
+back-port — a React-wrapper label assertion couldn't pass under vitest's `NODE_MODE` build no matter
+what, until the test was rewritten to drive the raw element + assert the reflected attribute/part.)
 
 ## A shared chrome library that isolates COLOR but not the BOX MODEL: keep host element rules SCOPED
 
@@ -335,8 +355,9 @@ padding, wrong radius — even though their color survives. The reset isolates c
 
 **Fix — on the CONSUMER: keep host element base rules SCOPED, and only globally relax what the reset
 actually covers.** Scope your global element rules so they don't reach the library's controls (a
-container class, or `:not([data-app-shell-control])`), and reserve any *global* element rule for the
-parts the reset owns (e.g. re-aliasing a design token), not the box model the library lays out:
+container class, or excluding the controls' marker attribute), and reserve any *global* element rule
+for the parts the reset owns (e.g. re-aliasing a design token), not the box model the library lays
+out:
 
 ```css
 /* WRONG: a bare unlayered global rule out-ranks the library's layered sizing and squashes its controls */
@@ -344,17 +365,38 @@ button { padding: 4px 8px; border-radius: 2px; font-size: 13px; }
 
 /* RIGHT: scope host element rules so the shared controls are left to size themselves */
 .login-form button { padding: 4px 8px; border-radius: 2px; }      /* container-scoped */
-button:not([data-app-shell-control]) { padding: 4px 8px; }        /* or exclude the library's controls */
+button:where(:not([data-app-shell-control])) { padding: 4px 8px; } /* or exclude the controls — :where() keeps it (0,0,1) */
+```
+
+**The exclusion-selector trap (important): wrap the `:not()` in `:where()`, never use a bare
+`:not([attr])`.** A bare `:not([data-app-shell-control])` **leaks the attribute selector's
+specificity through `:not()`** — it raises the rule from a plain element's `(0,0,1)` to `(0,1,1)`.
+That now out-ranks your own *class-only* host-button overrides (`.foo-link`, `.foo-cancel`, the
+transparent/outline buttons at `(0,1,0)`) and **repaints them with the base look** — a real visual
+regression, not a near-miss. `:where(:not(…))` carries **zero** specificity, so the base stays
+`(0,0,1)` — identical to a bare `button {}` — your class-only overrides win again, and the library's
+controls are still excluded. Guard it at source: a test that rejects **both** the unscoped global
+form and the bare-`:not()` form.
+
+```css
+/* WRONG too: a bare :not([attr]) leaks specificity → (0,1,1), out-ranks your own .foo-link/.foo-cancel (0,1,0) */
+button:not([data-app-shell-control]) { … }
+/* RIGHT: :where() zeroes it → (0,0,1), your class-only overrides still win */
+button:where(:not([data-app-shell-control])) { … }
 ```
 
 The rule of thumb: **a chrome library can isolate color cheaply (a reset re-asserts a few literal
 visuals) but cannot defend its box model without owning your layout** — so the box model stays a
-shared contract, and the consumer keeps its global element styling off the library's controls.
+shared contract, and the consumer keeps its global element styling off the library's controls (and
+keeps that global rule at element specificity via `:where()`).
 
 (Learned adopting [`@jeswr/solid-elements`](https://github.com/jeswr/solid-elements) across the vite
 pod-apps, 2026-06-17 — `@jeswr/app-shell`'s reset isolated the controls' color but not their box
 model, so a consuming app's unlayered global `button {}` distorted the shared controls until the
-host's element rules were scoped.)
+host's element rules were scoped. The `:where()`-vs-bare-`:not()` specificity-leak refinement came
+from the pod-mail/pod-money back-port of that safe form, where the bare `button:not([…])` exclusion
+was reviewer-flagged Medium for raising the base button to `(0,1,1)` and silently repainting the
+apps' own class-only link/cancel buttons; pod-docs landed the `:where(:not(…))` fix.)
 
 ## Gotchas
 
@@ -364,8 +406,10 @@ host's element rules were scoped.)
 | Editor breaks on the empty string mid-edit | A controlled input wired straight to a throwing typed setter (`@solid/object` `…As`) throws on every transiently-invalid keystroke — store the **raw** string in local state, never throw in `onChange`, validate the assembled draft separately, call the setter only at save with a valid value |
 | Host app's `button {}` repaints your shell's controls | Tailwind v4: an **unlayered** author rule beats EVERY `@layer`'d utility — `@layer`/specificity bumps don't fix it. Ship an unlayered attribute-scoped reset (`[data-app-shell-control]{…}`, 0,1,0 > a bare element's 0,0,1 when both unlayered) + a **private literal** token mirror (`--as-accent`, not `var(--accent)` indirection) declared on a `:root`/shared ancestor so portaled menus/dialogs inherit it |
 | Dark-OS user sees a one-frame light flash | A `ThemeProvider` resolving/applying the theme in a passive `useEffect` runs after paint, so `resolvedTheme` starts `light`. Apply in an **isomorphic layout effect** (`useLayoutEffect` in-browser, `useEffect` off-browser via a `typeof window` guard) — correct on the first painted frame, SSR-safe; a pre-hydration class-toggling `<script>` doesn't fix React state |
-| Web-Component prop dropped via the React wrapper | `@lit/react` `createComponent` classifies props before the Lit class finalizes, so a non-reflected reactive **property** is silently dropped under React 19 — the element renders its fallback (e.g. `Loading` shows generic "Loading"). Make the prop `reflect: true`, or consume the raw element with a DOM **attribute** (`<jeswr-loading label="…">`); in jsdom tests assert the shadow root / `::part` / reflected attribute / `aria-label`, not the raw property |
-| Host `button {}` distorts the shared controls' SIZE | A chrome library's reset isolates **color/border/fill** but leaves the **box model** to its own layered classes — so a consumer's bare unlayered global `button {}` still out-ranks that layered sizing and squashes the shared controls. Scope host element rules (`.login-form button`, or `button:not([data-app-shell-control])`); only globally relax what the reset covers, never the box model |
+| Web-Component prop dropped via the React wrapper | `@lit/react` `createComponent` classifies props before the Lit class finalizes, so a non-reflected reactive **property** is silently dropped under React 19 — the element renders its fallback (e.g. `Loading` shows generic "Loading"). Make the prop `reflect: true`, or consume the raw element with a DOM **attribute** (`<jeswr-loading label="…">`) |
+| `@lit/react` prop won't render in a vitest test | `@lit/react` resolves its **`node`** export condition under vitest/jsdom, whose build SKIPS the `useLayoutEffect` that forwards props — so a React-wrapper assertion (`render(<Loading label/>)` then check the label) **can't pass even with `reflect: true`**; it's an env artifact, not a bug. Test the **raw element**: set the property directly, then assert the reflected attribute + the rendered `::part`, not the wrapper |
+| Host `button {}` distorts the shared controls' SIZE | A chrome library's reset isolates **color/border/fill** but leaves the **box model** to its own layered classes — so a consumer's bare unlayered global `button {}` still out-ranks that layered sizing and squashes the shared controls. Scope host element rules (`.login-form button`), or exclude the controls with `button:where(:not([data-app-shell-control]))`; only globally relax what the reset covers, never the box model |
+| Bare `:not([attr])` exclusion repaints your OWN buttons | The exclusion-selector trap: `button:not([data-app-shell-control])` **leaks the attribute's specificity through `:not()`** → `(0,1,1)`, out-ranking your class-only host overrides (`.foo-link`/`.foo-cancel` at `(0,1,0)`) and repainting them with the base look. Wrap it: `button:where(:not([…]))` carries **zero** specificity → stays `(0,0,1)`. Guard with a test rejecting BOTH the unscoped and the bare-`:not()` form |
 | `npm run build` bakes a localhost client-id | A prebuild config script doesn't get the bundler's `.env` loading — load `.env`/`.env.local` yourself via `node:util` `parseEnv`; a wrong client-id origin = broken login at the deployed subdomain |
 | `.env.local` fails to fully override `.env` | Resolve the origin **per-layer** (`shell → .env.local → .env → default`, first layer that yields one wins), never merge into one dict + pick per-variable — that lets `.env` beat `.env.local` cross-variable |
 | Forbidden container shows "empty" | A store `list()` swallowing 401/403→`[]` hides access-denied — wrap in a UI facade that surfaces a typed AccessDenied; clear stale list on a reload that 403s |
