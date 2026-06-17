@@ -180,11 +180,41 @@ both real (cited:
   export the pure resolver — so the precedence logic is **unit-test-importable side-effect-free** (no
   filesystem write, no `process.env` read) while still running on direct invocation.
 
+## Never call a throwing typed setter from a controlled input's `onChange`
+
+A controlled (live-edit) React text input wired **directly** to a typed model setter that
+**validates by throwing** is a recurring footgun. Typed RDF accessors (`@solid/object` /
+`@rdfjs/wrapper` `…As` setters, see the [`solid-object`](https://github.com/jeswr/solid-ai-coding/blob/main/skills/solid-object/SKILL.md)
+skill) throw on invalid input — and **every intermediate keystroke is transiently invalid**: the
+empty string mid-edit, a duplicate-while-retyping, a half-typed value. So `onChange={(e) =>
+model.statusName = e.target.value}` throws the moment the field is blank and breaks the editor.
+
+**Pattern: store raw, validate separately, set only valid.** The controlled input writes the **raw**
+string into local component state and **never throws in `onChange`**. Validation runs separately —
+over the assembled draft — surfaced as a save-blocking validity check / inline error. The throwing
+model setter is invoked **only at save time, with an already-valid value:**
+
+```tsx
+// onChange NEVER throws — raw string into local state
+<input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+// validate the assembled draft separately (save-blocking + inline error)
+const error = draft.name.trim() === "" ? "Name required"
+  : isDuplicate(draft.name) ? "Name already used" : undefined;
+// the throwing typed setter runs ONLY at save, with a valid value
+<button disabled={!!error} onClick={() => { model.statusName = draft.name; save(); }}>Save</button>
+```
+
+This generalises to ANY Solid app form bound to typed RDF accessors that validate — store-raw-then-
+validate, never let a transient mid-edit value reach a throwing setter. (Learned building the
+[`jeswr/solid-issues`](https://github.com/jeswr/solid-issues) workflow-editor, 2026-06-17 — a
+status-rename input wired straight to a throwing typed setter broke on the empty string mid-edit.)
+
 ## Gotchas
 
 | Gotcha | Detail |
 |---|---|
 | Interaction hangs until the pod answers | The write is blocking — update local state first, persist async, never `await` before the UI updates |
+| Editor breaks on the empty string mid-edit | A controlled input wired straight to a throwing typed setter (`@solid/object` `…As`) throws on every transiently-invalid keystroke — store the **raw** string in local state, never throw in `onChange`, validate the assembled draft separately, call the setter only at save with a valid value |
 | `npm run build` bakes a localhost client-id | A prebuild config script doesn't get the bundler's `.env` loading — load `.env`/`.env.local` yourself via `node:util` `parseEnv`; a wrong client-id origin = broken login at the deployed subdomain |
 | `.env.local` fails to fully override `.env` | Resolve the origin **per-layer** (`shell → .env.local → .env → default`, first layer that yields one wins), never merge into one dict + pick per-variable — that lets `.env` beat `.env.local` cross-variable |
 | Forbidden container shows "empty" | A store `list()` swallowing 401/403→`[]` hides access-denied — wrap in a UI facade that surfaces a typed AccessDenied; clear stale list on a reload that 403s |

@@ -4,6 +4,15 @@
 
 ### Changed
 
+- **`solid-app-shell` skill** — new section "Never call a throwing typed setter from a controlled
+  input's `onChange`" + a gotchas-table row. A live-edit (controlled) React text input wired
+  directly to a typed model setter that validates by throwing breaks on every transiently-invalid
+  keystroke (the empty string mid-edit, a duplicate-while-retyping). Pattern: the controlled input
+  stores the **raw** string in local component state and never throws in `onChange`; validation runs
+  separately over the assembled draft (save-blocking + inline error); the throwing typed setter
+  (`@solid/object` `…As`) is invoked only at save time with an already-valid value. Generalises to
+  any Solid app form bound to typed RDF accessors that validate. (Learned building the
+  [jeswr/solid-issues](https://github.com/jeswr/solid-issues) workflow-editor, 2026-06-17.)
 - **`solid-type-index` skill** — new section "Type-Index-driven client-side pod search (no server
   FTS)" capturing the cross-category global-pod-search pattern from shipping the Pod Manager global
   search ([jeswr/solid-pod-manager #97](https://github.com/jeswr/solid-pod-manager/issues/97)). A
