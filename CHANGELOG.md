@@ -1,5 +1,25 @@
 # Changelog
 
+## [Unreleased] - 2026-06-17 (4)
+
+### Changed
+
+- **`solid-app-shell` skill** — two new sections + matching gotchas-table rows, both learned
+  adopting [`@jeswr/solid-elements`](https://github.com/jeswr/solid-elements) (the framework-agnostic
+  Web-Components chrome lib) across the vite pod-apps, 2026-06-17. (1) "`@lit/react` drops a custom
+  element's reactive PROPERTY under React 19 unless it reflects to an attribute" — `@lit/react`
+  `createComponent` classifies props before the Lit class finalizes, so a non-reflected reactive
+  property is silently dropped under React 19 and the element renders its fallback (a `Loading` label
+  showed generic "Loading"). Fixes: make the prop `reflect: true`; until then consume the raw element
+  with a DOM attribute (`<jeswr-loading label="…">`); in jsdom tests assert the shadow root / `::part`
+  / reflected attribute / `aria-label`, not the raw property. (2) "A shared chrome library that
+  isolates COLOR but not the BOX MODEL: keep host element rules SCOPED" — `@jeswr/app-shell`'s
+  unlayered attribute-scoped reset isolates the controls' color/border/fill but deliberately leaves
+  the box model (padding/radius/font-size) to its own layered classes, so a consumer's bare unlayered
+  global `button {}` still out-ranks that layered sizing and distorts the shared controls. Fix on the
+  consumer: scope host element rules (`.login-form button`, or `button:not([data-app-shell-control])`)
+  and only globally relax what the reset actually covers, never the box model.
+
 ## [Unreleased] - 2026-06-17 (3)
 
 ### Changed

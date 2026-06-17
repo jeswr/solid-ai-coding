@@ -286,6 +286,76 @@ useIsomorphicLayoutEffect(() => {
 `ThemeProvider` applying the theme in a passive `useEffect` flashed light for one frame for dark-OS
 `system` users.)
 
+## `@lit/react` drops a custom element's reactive PROPERTY under React 19 unless it reflects to an attribute
+
+When a framework-agnostic Web-Components chrome library (Lit) ships a React adapter via `@lit/react`'s
+`createComponent`, the wrapper classifies each prop **at component-creation time** — *before* the Lit
+element class is finalized. A Lit reactive **property** that is NOT reflected to an attribute can then
+be **silently dropped** when set through the React wrapper under React 19: the property never reaches
+the element, so it renders its fallback (e.g. a `<jeswr-loading label="Signing you in…">` shows the
+generic "Loading"). It looks like the prop "didn't take" with no error.
+
+Three fixes, in order of preference:
+
+- **(a) Make the element's string props `reflect: true`** (declare them as attributes) so the wrapper
+  forwards them as attributes — the durable fix, in the library.
+- **(b) Until then, consume via the RAW custom element with a DOM attribute**, not the React-wrapper
+  property: `<jeswr-loading label="Signing you in…">` rather than the wrapped `<Loading label=…>`.
+- **(c) In unit tests (jsdom), assert via the rendered shadow root / `::part` / the reflected
+  attribute / `aria-label` — NOT the raw property value**, which is unreliable in jsdom — and validate
+  real prop-forwarding in a browser.
+
+```tsx
+// (a) library-side: a reflected property is forwarded by @lit/react
+@property({ type: String, reflect: true }) label = "Loading";
+
+// (b) consumer workaround until (a) lands — raw element + DOM attribute, not the wrapper property
+<jeswr-loading label="Signing you in…" />
+
+// (c) test against the rendered DOM, not the property
+expect(el.shadowRoot!.querySelector('[part="label"]')!.textContent).toBe("Signing you in…");
+// (or assert the reflected attribute / aria-label) — NOT expect(el.label)
+```
+
+(Learned adopting [`@jeswr/solid-elements`](https://github.com/jeswr/solid-elements) across the vite
+pod-apps, 2026-06-17 — a `Loading` label set via the `@lit/react` wrapper was dropped under React 19
+and the spinner showed the generic fallback; reflecting the prop / using the raw element + DOM
+attribute fixed it.)
+
+## A shared chrome library that isolates COLOR but not the BOX MODEL: keep host element rules SCOPED
+
+A shared React/WC chrome library (like [`@jeswr/app-shell`](https://github.com/jeswr/app-shell)) may
+isolate its controls' **color / border / fill** via an unlayered attribute-scoped reset
+(`[data-app-shell-control]`, see the Tailwind-v4 section above) + private design tokens — but
+deliberately leave the **box model** (padding / border-radius / font-size) to its own *layered*
+utility classes, so consumers can size things. The consequence on the consuming side: a consumer
+app's **bare unlayered global `button {}`** that sets box-model props will still out-rank the
+library's *layered* sizing (unlayered beats layered) and **distort the shared controls** — squashed
+padding, wrong radius — even though their color survives. The reset isolates color, not the box model.
+
+**Fix — on the CONSUMER: keep host element base rules SCOPED, and only globally relax what the reset
+actually covers.** Scope your global element rules so they don't reach the library's controls (a
+container class, or `:not([data-app-shell-control])`), and reserve any *global* element rule for the
+parts the reset owns (e.g. re-aliasing a design token), not the box model the library lays out:
+
+```css
+/* WRONG: a bare unlayered global rule out-ranks the library's layered sizing and squashes its controls */
+button { padding: 4px 8px; border-radius: 2px; font-size: 13px; }
+
+/* RIGHT: scope host element rules so the shared controls are left to size themselves */
+.login-form button { padding: 4px 8px; border-radius: 2px; }      /* container-scoped */
+button:not([data-app-shell-control]) { padding: 4px 8px; }        /* or exclude the library's controls */
+```
+
+The rule of thumb: **a chrome library can isolate color cheaply (a reset re-asserts a few literal
+visuals) but cannot defend its box model without owning your layout** — so the box model stays a
+shared contract, and the consumer keeps its global element styling off the library's controls.
+
+(Learned adopting [`@jeswr/solid-elements`](https://github.com/jeswr/solid-elements) across the vite
+pod-apps, 2026-06-17 — `@jeswr/app-shell`'s reset isolated the controls' color but not their box
+model, so a consuming app's unlayered global `button {}` distorted the shared controls until the
+host's element rules were scoped.)
+
 ## Gotchas
 
 | Gotcha | Detail |
@@ -294,6 +364,8 @@ useIsomorphicLayoutEffect(() => {
 | Editor breaks on the empty string mid-edit | A controlled input wired straight to a throwing typed setter (`@solid/object` `…As`) throws on every transiently-invalid keystroke — store the **raw** string in local state, never throw in `onChange`, validate the assembled draft separately, call the setter only at save with a valid value |
 | Host app's `button {}` repaints your shell's controls | Tailwind v4: an **unlayered** author rule beats EVERY `@layer`'d utility — `@layer`/specificity bumps don't fix it. Ship an unlayered attribute-scoped reset (`[data-app-shell-control]{…}`, 0,1,0 > a bare element's 0,0,1 when both unlayered) + a **private literal** token mirror (`--as-accent`, not `var(--accent)` indirection) declared on a `:root`/shared ancestor so portaled menus/dialogs inherit it |
 | Dark-OS user sees a one-frame light flash | A `ThemeProvider` resolving/applying the theme in a passive `useEffect` runs after paint, so `resolvedTheme` starts `light`. Apply in an **isomorphic layout effect** (`useLayoutEffect` in-browser, `useEffect` off-browser via a `typeof window` guard) — correct on the first painted frame, SSR-safe; a pre-hydration class-toggling `<script>` doesn't fix React state |
+| Web-Component prop dropped via the React wrapper | `@lit/react` `createComponent` classifies props before the Lit class finalizes, so a non-reflected reactive **property** is silently dropped under React 19 — the element renders its fallback (e.g. `Loading` shows generic "Loading"). Make the prop `reflect: true`, or consume the raw element with a DOM **attribute** (`<jeswr-loading label="…">`); in jsdom tests assert the shadow root / `::part` / reflected attribute / `aria-label`, not the raw property |
+| Host `button {}` distorts the shared controls' SIZE | A chrome library's reset isolates **color/border/fill** but leaves the **box model** to its own layered classes — so a consumer's bare unlayered global `button {}` still out-ranks that layered sizing and squashes the shared controls. Scope host element rules (`.login-form button`, or `button:not([data-app-shell-control])`); only globally relax what the reset covers, never the box model |
 | `npm run build` bakes a localhost client-id | A prebuild config script doesn't get the bundler's `.env` loading — load `.env`/`.env.local` yourself via `node:util` `parseEnv`; a wrong client-id origin = broken login at the deployed subdomain |
 | `.env.local` fails to fully override `.env` | Resolve the origin **per-layer** (`shell → .env.local → .env → default`, first layer that yields one wins), never merge into one dict + pick per-variable — that lets `.env` beat `.env.local` cross-variable |
 | Forbidden container shows "empty" | A store `list()` swallowing 401/403→`[]` hides access-denied — wrap in a UI facade that surfaces a typed AccessDenied; clear stale list on a reload that 403s |
