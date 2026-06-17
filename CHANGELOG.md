@@ -1,5 +1,21 @@
 # Changelog
 
+## [Unreleased] - 2026-06-17 (3)
+
+### Changed
+
+- **`solid-app-shell` skill** — two new sections + matching gotchas-table rows, both learned
+  building [`@jeswr/app-shell`](https://github.com/jeswr/app-shell), 2026-06-17. (1) "Tailwind v4: a
+  host app's UNLAYERED global rule out-ranks ALL your `@layer`'d utilities" — a shared library's
+  controls get repainted by a host's bare `button {}` because unlayered author styles beat every
+  layered utility; `@layer`/specificity bumps don't fix it. Defenses: an unlayered attribute-scoped
+  defensive reset (`[data-app-shell-control]{…}`) + a private **literal** design-token mirror (not
+  `var()` indirection, which re-resolves a consumer override and misses portaled content).
+  (2) "Apply theme in an isomorphic layout effect, not a passive `useEffect`" — a `ThemeProvider`
+  resolving the theme in a passive `useEffect` flashes light for one frame for dark-OS `system`
+  users; apply via `useLayoutEffect` in-browser / `useEffect` off-browser (a `typeof window` guard)
+  so `resolvedTheme` + the `.dark` class are right on the first painted frame, SSR-safe.
+
 ## [Unreleased] - 2026-06-17 (2)
 
 ### Changed

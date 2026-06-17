@@ -209,12 +209,83 @@ validate, never let a transient mid-edit value reach a throwing setter. (Learned
 [`jeswr/solid-issues`](https://github.com/jeswr/solid-issues) workflow-editor, 2026-06-17 — a
 status-rename input wired straight to a throwing typed setter broke on the empty string mid-edit.)
 
+## Tailwind v4: a host app's UNLAYERED global rule out-ranks ALL your `@layer`'d utilities
+
+A shared component library (an app shell consumed by many apps) cannot assume the host's global CSS
+leaves its controls alone. In Tailwind v4 utilities live in `@layer utilities`, and an author rule
+that is **unlayered** — a bare `button {}` / `input {}` in the app's CSS, outside any `@layer` —
+beats **every** `@layer`'d rule in the cascade, regardless of specificity or source order (unlayered
+author styles always win over layered ones). So a host app's plain `button { background; border;
+color }` repaints your shell's buttons, and **`@layer`'ing your component CSS or bumping specificity
+does NOT fix it** — a layered rule loses to an unlayered one no matter how specific.
+
+Two defenses that actually make a library immune to arbitrary host global CSS:
+
+- **Ship an unlayered, attribute-scoped defensive reset.** Mark your controls with a data attribute
+  and write an **unlayered** `[data-app-shell-control] {…}` rule. An attribute selector (specificity
+  0,1,1) beats a bare element selector (0,0,1) **when both are unlayered**, so your controls keep
+  their look against any host `button {}`. Re-assert the leak-prone visuals there (fill/border/text
+  per variant, the `:focus-visible` ring). Give consumers an escape hatch (a prop to opt a control
+  out) so they can still restyle it.
+- **Isolate design tokens with a library-private mirror of LITERAL values, not `var()` indirection.**
+  A token that resolves `var(--accent)` re-reads the consumer's `:root` at use-time, so a host
+  re-aliasing `--accent` still clobbers you. Hold literal values in private names instead
+  (`--as-accent: #4f46e5`), and a private literal mirror also correctly reaches **portaled** content
+  (dropdowns/dialogs rendered outside your subtree), which a subtree-scoped re-assertion misses.
+
+```css
+/* UNLAYERED (outside any @layer) so a host's bare `button {}` can't beat it.
+   Attribute selector (0,1,1) > element selector (0,0,1) when both are unlayered. */
+[data-app-shell-control] {
+  --as-accent: #4f46e5;            /* private LITERAL mirror — not var(--accent) */
+  background: var(--as-accent);    /* portaled menus/dialogs resolve this too */
+  border: 1px solid var(--as-accent);
+  color: #fff;
+}
+[data-app-shell-control]:focus-visible { outline: 2px solid var(--as-accent); }
+```
+
+(Learned building [`@jeswr/app-shell`](https://github.com/jeswr/app-shell), 2026-06-17 — a consuming
+app's unlayered `button {}` repainted the shell's controls and `@layer`/specificity bumps didn't fix
+it; an unlayered attribute-scoped reset + a private literal token mirror did.)
+
+## Apply theme in an isomorphic layout effect, not a passive `useEffect`, to kill the first-frame flash
+
+A `ThemeProvider` that resolves + applies the theme (and adopts the stored preference) in a passive
+`useEffect` runs **after paint**: for a dark-OS `system` user, `resolvedTheme` starts `"light"` and
+is corrected only after the first frame — a one-frame light flash for any content rendered off
+`resolvedTheme`. An inline pre-hydration `<script>` that toggles the `.dark` **class** does NOT fix
+the React **state** that content reads.
+
+**Fix: apply via an isomorphic layout effect** — `useLayoutEffect` in the browser, `useEffect`
+off-browser (a `typeof window` guard) — so `resolvedTheme` and the `.dark` class are correct on the
+**first painted frame**. It's SSR-safe: a no-op off-browser, and the first render still uses the
+SSR-stable default so there's no hydration mismatch. Generalises to any light/dark/system theme
+provider.
+
+```ts
+const useIsomorphicLayoutEffect =
+  typeof window !== "undefined" ? useLayoutEffect : useEffect;
+
+useIsomorphicLayoutEffect(() => {
+  const resolved = preference === "system" ? systemPrefersDark() ? "dark" : "light" : preference;
+  setResolvedTheme(resolved);                                  // correct on the first PAINTED frame
+  document.documentElement.classList.toggle("dark", resolved === "dark");
+}, [preference]);
+```
+
+(Learned building [`@jeswr/app-shell`](https://github.com/jeswr/app-shell), 2026-06-17 — a
+`ThemeProvider` applying the theme in a passive `useEffect` flashed light for one frame for dark-OS
+`system` users.)
+
 ## Gotchas
 
 | Gotcha | Detail |
 |---|---|
 | Interaction hangs until the pod answers | The write is blocking — update local state first, persist async, never `await` before the UI updates |
 | Editor breaks on the empty string mid-edit | A controlled input wired straight to a throwing typed setter (`@solid/object` `…As`) throws on every transiently-invalid keystroke — store the **raw** string in local state, never throw in `onChange`, validate the assembled draft separately, call the setter only at save with a valid value |
+| Host app's `button {}` repaints your shell's controls | Tailwind v4: an **unlayered** author rule beats EVERY `@layer`'d utility — `@layer`/specificity bumps don't fix it. Ship an unlayered attribute-scoped reset (`[data-app-shell-control]{…}`, 0,1,1 > a bare element's 0,0,1 when both unlayered) + a **private literal** token mirror (`--as-accent`, not `var(--accent)` indirection — also reaches portaled menus/dialogs) |
+| Dark-OS user sees a one-frame light flash | A `ThemeProvider` resolving/applying the theme in a passive `useEffect` runs after paint, so `resolvedTheme` starts `light`. Apply in an **isomorphic layout effect** (`useLayoutEffect` in-browser, `useEffect` off-browser via a `typeof window` guard) — correct on the first painted frame, SSR-safe; a pre-hydration class-toggling `<script>` doesn't fix React state |
 | `npm run build` bakes a localhost client-id | A prebuild config script doesn't get the bundler's `.env` loading — load `.env`/`.env.local` yourself via `node:util` `parseEnv`; a wrong client-id origin = broken login at the deployed subdomain |
 | `.env.local` fails to fully override `.env` | Resolve the origin **per-layer** (`shell → .env.local → .env → default`, first layer that yields one wins), never merge into one dict + pick per-variable — that lets `.env` beat `.env.local` cross-variable |
 | Forbidden container shows "empty" | A store `list()` swallowing 401/403→`[]` hides access-denied — wrap in a UI facade that surfaces a typed AccessDenied; clear stale list on a reload that 403s |
