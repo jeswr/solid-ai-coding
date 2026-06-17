@@ -10,7 +10,8 @@
   controls get repainted by a host's bare `button {}` because unlayered author styles beat every
   layered utility; `@layer`/specificity bumps don't fix it. Defenses: an unlayered attribute-scoped
   defensive reset (`[data-app-shell-control]{…}`) + a private **literal** design-token mirror (not
-  `var()` indirection, which re-resolves a consumer override and misses portaled content).
+  `var()` indirection, which re-resolves a consumer's `:root` override at use-time), declared on a
+  `:root`/shared ancestor so portaled menus/dialogs inherit it.
   (2) "Apply theme in an isomorphic layout effect, not a passive `useEffect`" — a `ThemeProvider`
   resolving the theme in a passive `useEffect` flashes light for one frame for dark-OS `system`
   users; apply via `useLayoutEffect` in-browser / `useEffect` off-browser (a `typeof window` guard)

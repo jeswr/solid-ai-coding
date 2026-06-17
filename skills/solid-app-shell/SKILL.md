@@ -223,22 +223,30 @@ Two defenses that actually make a library immune to arbitrary host global CSS:
 
 - **Ship an unlayered, attribute-scoped defensive reset.** Mark your controls with a data attribute
   and write an **unlayered** `[data-app-shell-control] {…}` rule. An attribute selector (specificity
-  0,1,1) beats a bare element selector (0,0,1) **when both are unlayered**, so your controls keep
+  0,1,0) beats a bare element selector (0,0,1) **when both are unlayered**, so your controls keep
   their look against any host `button {}`. Re-assert the leak-prone visuals there (fill/border/text
   per variant, the `:focus-visible` ring). Give consumers an escape hatch (a prop to opt a control
   out) so they can still restyle it.
 - **Isolate design tokens with a library-private mirror of LITERAL values, not `var()` indirection.**
   A token that resolves `var(--accent)` re-reads the consumer's `:root` at use-time, so a host
   re-aliasing `--accent` still clobbers you. Hold literal values in private names instead
-  (`--as-accent: #4f46e5`), and a private literal mirror also correctly reaches **portaled** content
-  (dropdowns/dialogs rendered outside your subtree), which a subtree-scoped re-assertion misses.
+  (`--as-accent: #4f46e5`). Declare that private mirror on a **shared ancestor that portaled content
+  also inherits from** — a `:root`/host-element scope (or a class on a stable ancestor), NOT only on
+  the control selector: CSS custom properties inherit down the DOM **subtree** only, so a token
+  declared on `[data-app-shell-control]` won't reach a dropdown/dialog **portaled outside** that
+  subtree. (Alternatively, stamp portaled roots with the same data attribute.) A `:root`-scoped
+  private literal both reaches portals and resists the consumer-override that `var()` indirection
+  suffers.
 
 ```css
+/* The private LITERAL mirror lives on a shared ancestor (`:root`/host) so
+   portaled menus/dialogs inherit it — NOT `var(--accent)` indirection. */
+:root { --as-accent: #4f46e5; }
+
 /* UNLAYERED (outside any @layer) so a host's bare `button {}` can't beat it.
-   Attribute selector (0,1,1) > element selector (0,0,1) when both are unlayered. */
+   Attribute selector (0,1,0) > element selector (0,0,1) when both are unlayered. */
 [data-app-shell-control] {
-  --as-accent: #4f46e5;            /* private LITERAL mirror — not var(--accent) */
-  background: var(--as-accent);    /* portaled menus/dialogs resolve this too */
+  background: var(--as-accent);
   border: 1px solid var(--as-accent);
   color: #fff;
 }
@@ -284,7 +292,7 @@ useIsomorphicLayoutEffect(() => {
 |---|---|
 | Interaction hangs until the pod answers | The write is blocking — update local state first, persist async, never `await` before the UI updates |
 | Editor breaks on the empty string mid-edit | A controlled input wired straight to a throwing typed setter (`@solid/object` `…As`) throws on every transiently-invalid keystroke — store the **raw** string in local state, never throw in `onChange`, validate the assembled draft separately, call the setter only at save with a valid value |
-| Host app's `button {}` repaints your shell's controls | Tailwind v4: an **unlayered** author rule beats EVERY `@layer`'d utility — `@layer`/specificity bumps don't fix it. Ship an unlayered attribute-scoped reset (`[data-app-shell-control]{…}`, 0,1,1 > a bare element's 0,0,1 when both unlayered) + a **private literal** token mirror (`--as-accent`, not `var(--accent)` indirection — also reaches portaled menus/dialogs) |
+| Host app's `button {}` repaints your shell's controls | Tailwind v4: an **unlayered** author rule beats EVERY `@layer`'d utility — `@layer`/specificity bumps don't fix it. Ship an unlayered attribute-scoped reset (`[data-app-shell-control]{…}`, 0,1,0 > a bare element's 0,0,1 when both unlayered) + a **private literal** token mirror (`--as-accent`, not `var(--accent)` indirection) declared on a `:root`/shared ancestor so portaled menus/dialogs inherit it |
 | Dark-OS user sees a one-frame light flash | A `ThemeProvider` resolving/applying the theme in a passive `useEffect` runs after paint, so `resolvedTheme` starts `light`. Apply in an **isomorphic layout effect** (`useLayoutEffect` in-browser, `useEffect` off-browser via a `typeof window` guard) — correct on the first painted frame, SSR-safe; a pre-hydration class-toggling `<script>` doesn't fix React state |
 | `npm run build` bakes a localhost client-id | A prebuild config script doesn't get the bundler's `.env` loading — load `.env`/`.env.local` yourself via `node:util` `parseEnv`; a wrong client-id origin = broken login at the deployed subdomain |
 | `.env.local` fails to fully override `.env` | Resolve the origin **per-layer** (`shell → .env.local → .env → default`, first layer that yields one wins), never merge into one dict + pick per-variable — that lets `.env` beat `.env.local` cross-variable |
