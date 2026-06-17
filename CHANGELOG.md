@@ -1,5 +1,25 @@
 # Changelog
 
+## [Unreleased] - 2026-06-17 (2)
+
+### Changed
+
+- **`solid-type-index` skill** — new section "Type-Index-driven client-side pod search (no server
+  FTS)" capturing the cross-category global-pod-search pattern from shipping the Pod Manager global
+  search ([jeswr/solid-pod-manager #97](https://github.com/jeswr/solid-pod-manager/issues/97)). A
+  pod has no server full-text index, so a "search my whole pod" is a Type-Index-seeded **client-side
+  scan**. Four rules: (1) enumerate the Type-Index `instance`/`instanceContainer` locations + the
+  app's own typed stores, scan client-side, **de-dupe by resource URL (typed entry wins)**;
+  (2) **OWN-POD ONLY** — SSRF-validate every profile-linked Type-Index/`pim:preferencesFile` URL
+  *and* the registered `instance*` locations against the user's own `pim:storage`
+  (`isUnderStorage`) **before** attaching the DPoP token, dropping any off-storage URL (the index/
+  profile values are attacker-writable); (3) **bound the scan** on max-sources + max-results +
+  wall-clock **time budget**, checked before each source and before the type-index network
+  discovery step, surfacing "showing first N" when capped so a large pod can't hang the UI;
+  (4) scheme-filter rendered URLs to `http(s):`. Cross-references the existing `solid-fetch-rdf`
+  primitives (`isUnderStorage`, cross-pod provenance tiers, external-index SSRF/scheme rules) it
+  reuses rather than duplicating them.
+
 ## [Unreleased] - 2026-06-17 (1)
 
 ### Changed

@@ -249,11 +249,63 @@ in-memory dataset through these wrappers, serialise the whole dataset with
   (Verified 2026-06 against the live `solid-panes` `main`; learned building the Pod
   Manager `/schedule` interop, jeswr/solid-pod-manager `src/lib/schedule.ts`.)
 
+## Type-Index-driven client-side pod search (no server FTS)
+
+_(An app that searches the **user's whole pod** across categories — a global
+search box — without a server full-text index. Browser/client.)_
+
+A Solid pod has no built-in full-text search, so a cross-category "search my
+pod" is a **client-side scan** seeded by the Type Index: it tells you *which
+containers hold what*, so you scan those instead of crawling blindly. Four
+rules, learned building the Pod Manager global pod search
+([jeswr/solid-pod-manager #97](https://github.com/jeswr/solid-pod-manager/issues/97)):
+
+1. **Enumerate, scan, de-dupe.** Build the source set from the user's
+   Type-Index-registered `solid:instance`/`solid:instanceContainer` locations
+   (the read path above) **plus** your own app's first-party typed stores, then
+   scan each client-side and match in memory. **De-dupe results by resource URL**
+   — the same resource can be reached via a type registration *and* a
+   first-party path; let the typed (registered) entry win so a result is shown
+   once with its richer metadata.
+
+2. **OWN-POD ONLY — SSRF-validate every discovered URL against the user's own
+   storages *before* fetching.** The profile-linked `solid:publicTypeIndex` /
+   `solid:privateTypeIndex` / `pim:preferencesFile` URLs (and the
+   `solid:instance*` locations *inside* an index) are values **read from a
+   document** — an attacker who can write a triple in the profile or index can
+   point them at a foreign origin. Before attaching the user's DPoP token,
+   confirm each URL falls under one of the user's own `pim:storage` roots
+   (the `isUnderStorage` segment-boundary check in `solid-fetch-rdf`); **drop —
+   never fetch — any off-storage URL** (attaching your DPoP token to a foreign
+   origin leaks it). Re-validate the registered `instance`/`instanceContainer`
+   locations too, not just the index URL — both come off attacker-writable
+   documents. (This is the own-pod-discovery mirror of `solid-fetch-rdf`'s
+   cross-pod-claim / external-index provenance rules; same primitive.)
+
+3. **Bound the scan so a large pod cannot hang the UI.** Cap on **three** axes
+   together — max **sources** scanned, max **results** collected, **and** a wall-
+   clock **time budget** — and check the budget **before each source** *and*
+   **before the type-index network discovery step** (discovery is itself N
+   fetches). Stop early when any cap trips and surface "showing first N" /
+   "results may be incomplete" so a capped scan never looks like an empty pod.
+
+4. **Render no raw RDF value as a link.** Result titles/URLs are pod data; a
+   `javascript:`/`data:` IRI in an `<a href>`/`<img src>` is an injection vector
+   — scheme-filter to `http(s):` before rendering (same rule as `solid-fetch-rdf`
+   §"Consuming an external Hydra / TPF search index safely").
+
+Keep the URL-validation and scheme checks in **pure predicates** (no fetch) so
+the search filter is exhaustively unit-testable without a live pod — the same
+testability discipline as the cross-pod provenance predicate in `solid-fetch-rdf`.
+
 ## Cross-references
 
 - `AGENTS.md` §Writing data — read-modify-write, ETags, explicit Content-Type,
   trailing-slash rule (containers end in `/`). This skill **closes** that
   section's type-index deferral.
+- `solid-fetch-rdf` skill — `isUnderStorage` own-storage containment check, the
+  cross-pod-claim provenance tiers, and the external-index SSRF/scheme rules the
+  pod-search section above reuses.
 - `solid-rdf` skill — Turtle/JSON-LD parse + serialise, the "never hand-build
   triples" rule.
 - `solid-server-matrix` (proposed) — type-index *seeding* differs by server
