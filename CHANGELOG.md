@@ -1,8 +1,38 @@
 # Changelog
 
-## [Unreleased] - 2026-06-17 (5)
+## [Unreleased] - 2026-06-18 (6)
 
 ### Changed
+
+- **`solid-reactive-authentication` skill** — new section "Eliminating the per-resource 401-dance
+  (proactive token attach)" + a `#### The 401-budget Playwright test` subsection + 9 matching
+  gotchas-table rows, learned across the proactive-fetch rollout over the 9 suite apps
+  (pod-mail/pod-money/pod-photos/pod-docs/pod-chat + the other vite pod-apps + Pod-Manager),
+  2026-06-18. **Root cause + fix:** `ReactiveFetchManager` is purely reactive (bare → `401` →
+  upgrade → retry, **per resource, no origin cache**), so every distinct URL pays a wasted
+  unauthenticated round-trip and the cost scales with resource count (a container that fans out to
+  N private children does N extra 401s). Fix: proactively attach the DPoP token on the **first**
+  request to an **allowed** origin via the shared `installProactiveAuthFetch`
+  (`@jeswr/solid-elements/auth`), keeping one bounded `401` re-upgrade — collapsing N extra
+  round-trips to one auth round-trip per storage root. Covers (1) the **credential boundary** as
+  load-bearing security (https-only, loopback-http only under a dev/test opt-in, empty-set ⇒
+  fail-closed, **resource origins only** — pod-root/storage + the WebID-document origin when the pod
+  serves it, but NOT the OIDC issuer origin, which stays on the pinned `customFetch`); (2) the **`customFetch`
+  re-entrancy pin** that DEADLOCKS login if internal OIDC HTTP re-enters the patch — pin
+  oauth4webapi's `customFetch` to the pristine fetch + an adversarial test; (3) the **armed-then-fail
+  FAIL-OPEN gap** (a real roborev-HIGH) — every failure path must `provider.reset()` + clear the
+  boundary, not just return to login; (4) **b7p ordering** — persist the DPoP credential before
+  publishing the logged-in UI (note which providers persist internally during `upgrade()`); (5) the
+  **per-app deltas** that bit the rollout (`resolvedIssuer()` sync-string vs async-URL; silent-restore
+  as a SessionProvider callback vs a module-level fn needing threaded `armBoundary`/`clearBoundary`
+  closures; `/auth`'s static `@jeswr/solid-session-restore` import; the namespace-scheme seed gotcha);
+  (6) the **import-vs-vendor** tradeoff (vite apps import `/auth` cleanly; PM/Next.js vendored the
+  dependency-free boundary helpers because importing `/auth` duplicated `@solid/reactive-authentication`);
+  and (7) the **401-budget Playwright test pattern** (intercept responses, tally resource-server 401s
+  per storage root, assert ≤1 per root AND that the count doesn't scale with resource count, against a
+  pinned local CSS, seeding N asserted-private resources, with a non-completing login a hard failure).
+  This **supersedes + consolidates** two earlier beads (the customFetch-pinning lesson + the
+  import-vs-vendor note).
 
 - **`solid-app-shell` skill** — two refinements to the prior (4) `@jeswr/solid-elements` adoption
   sections, learned in the pod-mail/pod-money/pod-docs "safe form" back-port across the vite pod-apps,
