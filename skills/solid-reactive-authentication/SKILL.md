@@ -326,6 +326,56 @@ React StrictMode double-mounts, which breaks two login-shell assumptions:
   captured reference points at a dead node and the popup never opens. Update the holder in each mount's
   effect; the flow reads the current one.
 
+### Cross-account DPoP-token leak: a per-login `globalThis.fetch` patch with NO teardown reuses the PREVIOUS account's token
+
+The single sharpest auth bug found across the suite build: **constructing a fresh
+`ReactiveFetchManager` (or a fresh provider) per login and calling `registerGlobally()` each time,
+with no teardown, leaks one account's DPoP token to the next.** The patch stacks: after
+**logout → re-login as a *different* WebID**, the new patch sits on top of (or re-uses a provider
+that still holds) the **previous** account's session/token, so the *first* request as the new user
+is upgraded-and-retried with the **prior** account's DPoP-bound credential — a cross-account
+confidential-data leak (read or write to account B's pod with account A's token). It is invisible in
+a single-account test and in any fetch-mock harness; it only surfaces on a real logout→switch.
+
+This is the same family as the StrictMode "snapshot the pristine fetch once" rule and the
+generation-fence below, but the failure here is **account isolation**, so the fix is a stricter
+lifecycle than idempotency alone:
+
+- **One singleton manager for the app's whole lifetime — never one per login.** Capture the
+  **pristine** `globalThis.fetch` exactly once (module-level), and `registerGlobally()` exactly once;
+  **keep the wrapper installed for the app's whole lifetime.** The wrapper is harmless without an
+  armed session (with no live token it falls through to the pristine fetch), so the lifecycle is:
+  *patch once, never restore-on-logout* — **logout clears/disarms the provider's SESSION STATE, not
+  the fetch patch.** (Restoring the pristine fetch on logout is the *other* coherent design, but then
+  the next login must explicitly, idempotently re-arm it — and that re-arm is the easy place to
+  re-introduce the stacking bug, so prefer "patch stays, session state is what's torn down".) Do not
+  `new ReactiveFetchManager(...)` + `registerGlobally()` again per login — that is what stacks patches
+  and orphans the old provider's live token.
+- **Rebuild the provider with CLEARED sessions on logout AND before each login.** A provider caches
+  resolved issuer + minted sessions/tokens keyed by identity; reusing it across an account switch is
+  exactly the leak. Tear it down (or `reset()` it to an empty session set) on logout, and again
+  **before** starting a new login, so a login can never inherit a prior account's session — belt and
+  braces, because the logout might have raced or been skipped.
+- **Login-generation fence.** A monotonic login epoch that **logout AND a newer login both advance**;
+  an in-flight login captures the epoch up front and re-checks it **after every await** (issuer
+  resolution, the popup, the token exchange) — a superseded login writes **no** session/token and
+  resolves to nothing, so a slow login-as-A cannot resurrect account A after the user has moved on to
+  log in as B (or logged out). This is the same epoch discipline as `reset()`/logout below, applied to
+  the *login* path specifically.
+- **Ownership-guarded teardown via session-ids.** Stamp each session with a unique id at creation;
+  teardown (logout, or a failed/superseded login's cleanup) revokes **only the session whose id it
+  owns**. The trap it prevents: an **older** login's late error (or its `finally`) firing **after** a
+  **newer** valid login has already established session B — an unguarded "clear the current session"
+  teardown then revokes B, logging out the legitimately-logged-in newer user. Compare the id before
+  revoking; an older owner that no longer owns the current session is a no-op.
+
+The unifying rule: **the fetch patch and the provider's session state are app-lifetime singletons
+whose ownership is fenced by a login epoch + per-session ids — never per-login objects.** Test it
+adversarially with a **real account switch**: log in as A, do one authenticated read, log out, log
+in as B, and assert B's first request carries **B's** token (or no token), never A's — and that an
+artificially-delayed login-as-A completing after the switch establishes **nothing**. (Cited: the
+@jeswr money-making-portfolio build — AccessRadar/Keystone/CapNote/Provena/Furlong, 2026-06.)
+
 ### Foreign-origin fetch — the global patch upgrades-and-retries, so capture native `fetch` BEFORE `registerGlobally()`
 
 `registerGlobally()` **replaces `globalThis.fetch`** with a wrapper that, on a `401`, **re-issues
@@ -569,6 +619,7 @@ Copy both into `src/lib/` and build your UI on them. The behaviour to implement:
 | Every probe fails `invalid_dpop_proof` on `htu` | `dpop` uses `htu` verbatim but the server strips query+fragment (RFC 9449 §4.2) — compute `htu` from scheme+authority+path only; keep the fragment URL only for in-process correlation |
 | Concurrent / double-click login | Single-flight `login()` keyed on requested WebID: same-WebID shares the in-flight promise; different-WebID must reject, never resolve as the wrong identity |
 | Logout re-authenticates as the old user | In-flight async settles after `reset()` and writes stale identity — generation-fence: capture an epoch up front, re-check it **after every await** before mutating state |
+| New login carries the PREVIOUS account's DPoP token (cross-account leak) | A fresh manager/provider + `registerGlobally()` **per login** with no teardown stacks the patch and reuses account A's session for account B's first request. Use **one app-lifetime singleton** (patch once; **logout clears the provider's session state, not the fetch patch** — the wrapper is harmless with no armed session), **rebuild the provider with cleared sessions on logout AND before each login**, **login-generation-fence** the login path, and revoke only the **session-id you own** so an older login's late error can't log out a newer valid session. Test with a real logout→login-as-different-WebID switch |
 | StrictMode double-patches fetch / dead popup | `registerGlobally()` must snapshot the pristine fetch **once** (a singleton); read the `<authorization-code-flow>` element via a module-level holder updated every mount, not a closed-over first-mount ref |
 | A foreign-origin fetch carries (or risks) the pod credential | The global patch upgrades-and-retries any `401` — **`credentials:"omit"` alone does NOT stop it** (the patch is above the per-request flag). Capture `globalThis.fetch` **before** `registerGlobally()` (eager module-eval snapshot + an idempotent first-wins `captureNativeFetch()` boot hook) and use that pristine ref for third-party hosts (WebID index / matrix.org / forum) |
 | First-load login throws on `ui.getCode` (mock-green) | The auth element's defining module is dynamic-`import()`ed and not upgraded at cold first mount, so `.getCode` is `undefined` — publish a **lazy accessor** `(...a) => ui.getCode(...a)` (read at call time), not `ui.getCode.bind(ui)`; `await customElements.whenDefined(…)` as belt-and-braces |

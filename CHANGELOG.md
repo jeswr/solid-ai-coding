@@ -1,5 +1,56 @@
 # Changelog
 
+## [Unreleased] - 2026-06-18 (7)
+
+### Changed
+
+Four portable lessons folded in from the @jeswr money-making-portfolio build
+(AccessRadar/Keystone/CapNote/Provena/Furlong, five production Solid apps, 2026-06). Two of the
+six surveyed lessons were skipped as already fully covered: origin-scoping the DPoP token /
+`publicFetch` for foreign reads / `installProactiveAuthFetch` (the "Foreign-origin fetch" +
+"Eliminating the per-resource 401-dance" sections), and silent session restore via `offline_access`
++ WebID-checked `onSession` persist + generation-fenced fail-closed restore (the "Reload-restore" +
+`@jeswr/solid-session-restore` sections).
+
+- **`solid-reactive-authentication` skill** — new section "Cross-account DPoP-token leak: a per-login
+  `globalThis.fetch` patch with NO teardown reuses the PREVIOUS account's token" + a matching
+  gotchas-table row. The sharpest auth bug of the build: constructing a fresh manager/provider per
+  login and calling `registerGlobally()` each time, with no teardown, stacks the patch and reuses
+  account A's session for account B's first request after a logout→re-login-as-a-different-WebID
+  switch — a cross-account confidential-data leak, invisible single-account and under fetch-mocks.
+  Fix: one app-lifetime singleton manager (patch the pristine fetch once; logout clears/disarms the
+  provider's session state, NOT the fetch patch — the wrapper is harmless with no armed session);
+  rebuild the provider with cleared sessions on logout AND before each login; a login-generation
+  fence re-checked after every await; and ownership-guarded teardown via per-session ids so an older
+  login's late error can't revoke a newer valid session. Includes the real-account-switch adversarial
+  test. Complements the existing StrictMode-singleton + generation-fence sections (those cover
+  idempotency and logout-restore; this covers account *isolation*).
+
+- **`solid-app-shell` skill** — new section "Consuming `@jeswr/app-shell` on a Tailwind-v4 app while
+  keeping YOUR OWN palette" + a gotchas-table row. The consumer-side recipe for taking the shell's
+  chrome (`ThemeProvider`/`ThemeToggle`, `AccountMenu`, `FeedbackButton`) in the app's own brand
+  colours instead of the suite palette: alias the shell-private `--as-*` tokens onto the app's palette
+  on both `:root` and `.dark`, register the `as-*` keys in the Tailwind v4 `@theme` + set
+  `darkMode: 'class'`, and import only the shell's reset — NOT its suite theme-token sheet, which
+  re-declares `--as-*` with the suite colours and overrides the aliases. Pairs with the prior
+  Tailwind-v4 defensive-reset + box-model-scoping sections (library defends its controls / consumer
+  steers them through the same `--as-*` token seam).
+
+- **`docs/data-modelling.md`** — new §2a "Byte-verify against the published artifact, mark
+  unconfirmed terms `(scheme)`, never fabricate a 'confirmed' IRI" + a §6 anti-patterns row. When
+  mapping onto a large published ontology (FIBO etc.): the ontology's human viewer is often a JS SPA
+  (the EDM-Council OKG/FIBO viewer is) — a `GET` of the viewer URL returns an empty shell, so fetch
+  the resolvable **TTL/RDF** artifact and confirm the term there; a verified term is **confirmed**, a
+  believed-but-unverifiable one is flagged **`(scheme)`** and kept provisional; never fabricate a
+  plausible IRI in a namespace you don't control; fill genuine gaps with a minimal, honestly-flagged
+  app vocab under a domain you serve.
+
+- **`AGENTS.md`** (Part 2 §Testing) — new rule: gate on `npm run build`, not just `tsc --noEmit` +
+  unit tests. An intra-app relative import with an explicit `.js` extension (`./foo.js` → `./foo.ts`)
+  **typechecks** under `tsc` `moduleResolution: "bundler"` but **breaks** `next build`/webpack, which
+  resolves the literal non-existent `./foo.js` — so a green typecheck + Vitest is not a green build.
+  Reinforces why CI carries a separate `build` job.
+
 ## [Unreleased] - 2026-06-18 (6)
 
 ### Changed

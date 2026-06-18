@@ -538,6 +538,15 @@ encounter it.
   `.mjs`/`.ts` from it trips the config transpiler in a CJS-default project), and avoid TS
   parameter properties (`constructor(readonly x…)`) in files run via `node x.ts` — strip-only
   mode rejects them.
+- **Gate on `npm run build`, not just `tsc --noEmit` + unit tests — they don't catch what the
+  bundler does.** An intra-app relative import written with an explicit **`.js` extension**
+  (`./foo.js` pointing at `./foo.ts`) **typechecks fine** under `tsc` with
+  `moduleResolution: "bundler"` (it allows the `.js` form) but **breaks the production build** —
+  `next build` / webpack resolves the literal `./foo.js`, which doesn't exist, and the build fails
+  (or a CI `build` job goes red after a green local `tsc` + `vitest`). The `tsc`/Vitest toolchain
+  and the production bundler resolve modules differently, so a green typecheck + unit suite is **not**
+  a green build. Run `next build` (the CI `build` job) locally before declaring a change done — this
+  is exactly why CI carries a separate `build` job alongside `typecheck` and `unit`.
 - Widen the server matrix as the app matures — see "Servers — develop, test, release" in Part 1.
 
 ### Recommended skills

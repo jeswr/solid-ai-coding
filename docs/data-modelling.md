@@ -44,6 +44,37 @@ chat, bookmarks — the right model is the one already deployed, not the one you
    returns HTML; parse the full Schema.org dump instead.)
 4. Only if nothing fits, mint locally — see §6 for the one acceptable way.
 
+### 2a. Byte-verify against the published artifact, mark unconfirmed terms `(scheme)`, never fabricate a "confirmed" IRI
+
+When mapping onto a large published ontology — FIBO (finance), SNOMED/LOINC, the schema.org
+extensions — **byte-verify each IRI against the published spec artifact before using it as a real
+`rdf:type`/property**, and apply a confirmed-vs-scheme discipline:
+
+- **The ontology's human browser is usually a JS SPA — do NOT trust it as the resolvable source.**
+  Many ontology viewers (e.g. the EDM-Council OKG / FIBO viewer) are client-rendered single-page
+  apps: a plain `GET` of the term's *viewer URL* returns an empty HTML shell with no triples, so
+  scraping it (or worse, transcribing an IRI off the rendered page) gives you an IRI you never
+  actually confirmed exists. Fetch the **resolvable RDF artifact** instead — the published TTL/RDF
+  (the ontology's release files / its content-negotiated `Accept: text/turtle` representation) — and
+  confirm the term IRI is present there with an `rdfs:label`/`rdfs:comment` (same dereference test as
+  §2 step 2).
+- **Confirmed vs `(scheme)`.** A term you have byte-verified in the published artifact is a
+  **confirmed** IRI — use it as a real type/property. A term you *believe* fits but could **not**
+  verify (the artifact didn't load, the IRI 404'd, the viewer was the only source) is **unconfirmed**:
+  mark it explicitly as `(scheme)` in your model/notes and treat it as provisional — never silently
+  promote it to a confirmed `rdf:type`.
+- **Never fabricate a confirmed IRI.** Do not invent a plausible-looking IRI in a published
+  namespace you don't control (`https://spec.edmcouncil.org/fibo/…/SomethingYouGuessed`) and assert
+  it as real — that is the §6 "minting at a domain you don't control" anti-pattern wearing a
+  respectable namespace, and it 404s for every consumer.
+- **Where no published term genuinely fits, mint a minimal, honestly-flagged app vocab** under a
+  domain you control and serve (§6) — small, documented, and clearly *yours* — rather than
+  back-filling a guessed IRI into someone else's namespace.
+
+(Learned in the @jeswr money-making-portfolio build — mapping a finance app onto FIBO,
+2026-06: the FIBO viewer is a JS SPA, so terms had to be byte-verified against the published RDF,
+unconfirmable ones flagged `(scheme)`, and the genuine gaps filled with a minimal honest app vocab.)
+
 ## 3. The selection ladder
 
 Tie-breakers, top-down: **W3C REC / ISO / IETF beats everything** → established de-facto
@@ -113,6 +144,7 @@ validation contract and machine-readable documentation.
 |---|---|---|
 | Minting at a fake / non-resolving domain (`https://myapp.example/vocab#…`) | Kills Findable + Reusable | Reuse a published term; mint only under a domain you control and serve; use **blank nodes** for structural intermediate nodes |
 | Inventing a term LOV already has | Fragments the graph | Search first (§2); use the established term even if you'd have named it differently |
+| Transcribing an IRI off an ontology's JS-SPA viewer (e.g. FIBO/OKG) and asserting it as a confirmed type | The viewer renders client-side — a `GET` returns an empty shell, so the IRI was never actually verified and may 404 for consumers | Byte-verify against the published **TTL/RDF** artifact (§2a); mark unverifiable terms `(scheme)`; never fabricate a "confirmed" IRI in a namespace you don't control |
 | Mixing `http://`/`https://` of one namespace (classically schema.org) | They are *different IRIs* — queries and shapes silently miss data | One canonical scheme per vocabulary: **schema.org → `http://`**, ActivityStreams → `https://`. Lint for stray variants |
 | `authorId`-style string properties standing in for links | The value is opaque; nothing joins | A real object property with an IRI (or blank node) as its value |
 | Undeclared / inconsistent prefixes | Typo'd IRIs that don't resolve | Resolve via prefix.cc, declare once, never redefine a well-known prefix |

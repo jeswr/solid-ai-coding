@@ -398,6 +398,61 @@ from the pod-mail/pod-money back-port of that safe form, where the bare `button:
 was reviewer-flagged Medium for raising the base button to `(0,1,1)` and silently repainting the
 apps' own class-only link/cancel buttons; pod-docs landed the `:where(:not(…))` fix.)
 
+## Consuming `@jeswr/app-shell` on a Tailwind-v4 app while keeping YOUR OWN palette
+
+`@jeswr/app-shell` ships its own suite theme tokens (the `--as-*` design tokens above). An app
+that has its **own** brand palette doesn't want the suite colours — it wants the shell's *chrome*
+(`ThemeProvider`/`ThemeToggle`, `AccountMenu`, `FeedbackButton`) to render in **its** colours.
+The recipe that worked across the portfolio apps, without forking the shell:
+
+- **Alias the shell-private `--as-*` tokens onto the app's own palette**, declared on **both**
+  `:root` and `.dark` so the shell's controls track your light/dark scheme. You re-point the
+  shell's private literals at *your* values rather than adopting its defaults:
+
+  ```css
+  :root      { --as-accent: var(--my-brand-600); --as-bg: var(--my-bg);  --as-fg: var(--my-fg); }
+  .dark      { --as-accent: var(--my-brand-400); --as-bg: var(--my-bg-dark); --as-fg: var(--my-fg-dark); }
+  ```
+
+- **Register the `as-*` keys in your Tailwind v4 `@theme` + make the `dark:` variant CLASS-driven**
+  so your utility classes can reference the same tokens and the shell's `ThemeProvider` (which toggles
+  the `.dark` **class**, see the isomorphic-layout-effect section) drives both the shell's chrome and
+  your app's dark variants from one switch. In Tailwind v4's CSS-first setup the `dark:` variant is
+  **media-driven by default** — you must opt into class-driven dark mode with the CSS-native
+  `@custom-variant` (otherwise `dark:` utilities ignore the `.dark` class the shell toggles, so your
+  app and the shell's chrome disagree on dark mode):
+
+  ```css
+  /* CSS-first (v4-native): register the tokens AND make `dark:` follow the `.dark` class */
+  @custom-variant dark (&:where(.dark, .dark *));
+  @theme {
+    --color-as-accent: var(--as-accent);
+    --color-as-bg: var(--as-bg);
+    --color-as-fg: var(--as-fg);
+  }
+  ```
+
+  (If your project drives Tailwind from a JS config instead, set `darkMode: "class"` there and load
+  it via `@config "../tailwind.config.js";` — a bare JS config is **not** picked up automatically in
+  v4's CSS-first mode, so the `dark:` variant would silently stay media-driven.)
+
+- **Import ONLY the shell's reset, not its suite theme tokens.** Pull in the unlayered
+  attribute-scoped reset (`[data-app-shell-control]`) that keeps the controls immune to your global
+  CSS — but do **not** import the shell's suite-palette token sheet, or it re-declares `--as-*` with
+  the suite colours and overrides your aliases. Import the reset stylesheet; alias the tokens
+  yourself. (The shell exposes the reset separately precisely so a consumer can keep its own palette.)
+
+The mental model: `@jeswr/app-shell` is the *theme-truth + RDF/stateful home* and the
+`--as-*` tokens are its **public theming seam** — a consumer keeps its own look by **re-pointing
+that seam at its palette** (`:root`/`.dark` aliases + the Tailwind theme keys + `darkMode:'class'`),
+taking the shell's reset for control-isolation but not its colour values. This pairs with the
+Tailwind-v4 defensive-reset section above (that's the library defending its controls; this is the
+consumer steering the controls to its own colours through the same token seam).
+
+(Learned in the @jeswr money-making-portfolio build — AccessRadar/Keystone/CapNote/Provena/Furlong,
+2026-06: consuming `@jeswr/app-shell` on Tailwind-v4 apps that each kept a distinct brand palette by
+aliasing the `--as-*` seam onto their own colours rather than adopting the suite theme.)
+
 ## Gotchas
 
 | Gotcha | Detail |
@@ -410,6 +465,7 @@ apps' own class-only link/cancel buttons; pod-docs landed the `:where(:not(…))
 | `@lit/react` prop won't render in a vitest test | `@lit/react` resolves its **`node`** export condition under vitest/jsdom, whose build SKIPS the `useLayoutEffect` that forwards props — so a React-wrapper assertion (`render(<Loading label/>)` then check the label) **can't pass even with `reflect: true`**; it's an env artifact, not a bug. Test the **raw element**: set the property directly, then assert the reflected attribute + the rendered `::part`, not the wrapper |
 | Host `button {}` distorts the shared controls' SIZE | A chrome library's reset isolates **color/border/fill** but leaves the **box model** to its own layered classes — so a consumer's bare unlayered global `button {}` still out-ranks that layered sizing and squashes the shared controls. Scope host element rules (`.login-form button`), or exclude the controls with `button:where(:not([data-app-shell-control]))`; only globally relax what the reset covers, never the box model |
 | Bare `:not([attr])` exclusion repaints your OWN buttons | The exclusion-selector trap: `button:not([data-app-shell-control])` **leaks the attribute's specificity through `:not()`** → `(0,1,1)`, out-ranking your class-only host overrides (`.foo-link`/`.foo-cancel` at `(0,1,0)`) and repainting them with the base look. Wrap it: `button:where(:not([…]))` carries **zero** specificity → stays `(0,0,1)`. Guard with a test rejecting BOTH the unscoped and the bare-`:not()` form |
+| App shows the SUITE palette instead of its own | To consume `@jeswr/app-shell` on a Tailwind-v4 app while keeping your own colours: **alias** the shell-private `--as-*` tokens onto your palette on **both `:root` and `.dark`**, register the `as-*` keys in `@theme` + set `darkMode: 'class'`, and import **only the shell's reset** — NOT its suite theme-token sheet (which re-declares `--as-*` with the suite colours and overrides your aliases). Re-point the token seam; don't fork the shell |
 | `npm run build` bakes a localhost client-id | A prebuild config script doesn't get the bundler's `.env` loading — load `.env`/`.env.local` yourself via `node:util` `parseEnv`; a wrong client-id origin = broken login at the deployed subdomain |
 | `.env.local` fails to fully override `.env` | Resolve the origin **per-layer** (`shell → .env.local → .env → default`, first layer that yields one wins), never merge into one dict + pick per-variable — that lets `.env` beat `.env.local` cross-variable |
 | Forbidden container shows "empty" | A store `list()` swallowing 401/403→`[]` hides access-denied — wrap in a UI facade that surfaces a typed AccessDenied; clear stale list on a reload that 403s |
