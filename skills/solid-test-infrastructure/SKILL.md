@@ -148,10 +148,38 @@ Rules:
 - Each vitest worker gets its own engine (vitest isolates workers) so tests in different files
   run truly in parallel without contention.
 
+## ESM project (`"type": "module"`) — Playwright loads the config + setup files as ESM
+
+In a package with `"type": "module"` in `package.json`, **Playwright loads its `.ts` config AND
+the imported `globalSetup`/`globalTeardown`/fixture files as ESM** — regardless of a nested
+`e2e/tsconfig.json` set to `module: commonjs`. So a CJS-only construct in any of those files
+throws at config-parse time (in CI, before a single test runs) — both `require` and `__dirname`
+are simply not defined in an ES module:
+
+- `require` / `require.resolve(...)` → `ReferenceError: require is not defined in ES module scope`;
+- `__dirname` → `ReferenceError: __dirname is not defined in ES module scope`.
+
+Fix:
+
+- in the Playwright config, pass `globalSetup`/`globalTeardown` as plain **relative path strings**
+  (Playwright resolves them against the config dir) — not `require.resolve(...)`;
+- in the setup files, derive `__dirname` from `import.meta.url`:
+  ```ts
+  import { fileURLToPath } from "node:url";
+  import { dirname } from "node:path";
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  ```
+- set the e2e `tsconfig.json` to `module: ESNext` + `moduleResolution: bundler` so `import.meta`
+  is type-correct.
+
+(Learned fixing the `jeswr/solid-browser-extension` e2e CI — the ESM-config fix. This is the
+ESM-default mirror of the CJS-default `globalSetup` transpiler gotcha below.)
+
 ## Gotchas
 
 | Gotcha | Detail |
 |---|---|
+| ESM project (`"type": "module"`) | Playwright loads the `.ts` config + `globalSetup`/`globalTeardown`/fixtures as ESM — a nested `tsconfig.json` `module: commonjs` does NOT change that. Both `require`/`require.resolve` and `__dirname` → `ReferenceError: … is not defined in ES module scope` at config-parse. Pass setup as path strings, derive `__dirname` from `import.meta.url`, set the e2e tsconfig to `module: ESNext` + `moduleResolution: bundler` (see section above; from `jeswr/solid-browser-extension`) |
 | `globalSetup` must be self-contained | Importing a sibling `.ts`/`.mjs` from it trips Playwright's config transpiler in a CJS-default project — inline everything |
 | `node x.ts` strip-only mode | Rejects TS parameter properties — plain field assignments in files run directly with node |
 | Port clash | CSS owns `:3000`; the app runs on `:3200` (see config comments) |

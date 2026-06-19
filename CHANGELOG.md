@@ -1,5 +1,22 @@
 # Changelog
 
+## [Unreleased] - 2026-06-19 (1)
+
+### Changed
+
+- **`solid-test-infrastructure` skill** — new section "ESM project (`"type": "module"`) —
+  Playwright loads the config + setup files as ESM" + a matching gotchas-table row. Learned
+  fixing the `jeswr/solid-browser-extension` e2e CI: in a `"type": "module"` package, Playwright
+  loads its `.ts` config AND the imported `globalSetup`/`globalTeardown`/fixture files as ESM —
+  a nested `e2e/tsconfig.json` set to `module: commonjs` does NOT change that — so CJS-only
+  constructs throw at config-parse time before any test runs (both `require`/`require.resolve` and
+  `__dirname` → `ReferenceError: … is not defined in ES module scope`). Fix:
+  pass `globalSetup`/`globalTeardown` as plain relative path strings (Playwright resolves them
+  against the config dir) instead of `require.resolve(...)`; derive `__dirname` from
+  `import.meta.url` via `fileURLToPath`; set the e2e `tsconfig.json` to `module: ESNext` +
+  `moduleResolution: bundler` so `import.meta` is type-correct. The ESM-default mirror of the
+  existing CJS-default `globalSetup` transpiler gotcha.
+
 ## [Unreleased] - 2026-06-18 (7)
 
 ### Changed
