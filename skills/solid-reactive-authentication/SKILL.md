@@ -188,6 +188,46 @@ then restore it. (Cited: `@jeswr/solid-session-restore` — `IndexedDbSessionSto
 non-extractable DPoP keypair, `restoreSession.test.ts` drives the real refresh grant over a stubbed
 transport; validated across the 7 vite pod-apps + the package extraction from the pod-mail pilot.)
 
+### Token-endpoint client auth: EXACT-host gates + a FAIL-CLOSED auth-method selection
+
+Two security rules for any code that picks how a confidential client authenticates to the token
+endpoint (the ESS `client_secret_basic` workaround, or `buildClientAuth` / `#clientAuth` in the
+reference provider). Both are **fail-closed** rules — get them wrong and you mis-route a secret or
+silently send no auth at all.
+
+- **Match the issuer host EXACTLY — `new URL(issuer).hostname === "login.inrupt.com"`, never a
+  substring `issuer.includes("login.inrupt.com")`.** A substring match is **spoofable** by a sibling
+  or sub-path host: `https://login.inrupt.com.attacker.example`,
+  `https://evil.example/login.inrupt.com/oidc`, `https://login.inrupt.com.example.com` all *contain*
+  the substring, so a bespoke per-vendor workaround (here, the ESS non-URL-encoded Basic credential)
+  would be sent to the **wrong server** — leaking a confidential `client_secret` in a non-standard
+  header to an attacker-controlled OP. Parse the URL and compare `.hostname`; an unparseable issuer →
+  `false` (never apply a vendor path to an unknown issuer). Trailing slash / path are then harmless
+  (`https://login.inrupt.com/oidc` still matches on host), and the lookalikes above cannot.
+- **Select the auth method FAIL-CLOSED — never silently downgrade to `none`.** A naive
+  `if (method === "client_secret_basic") {…} else None()` treats EVERY unrecognised
+  `token_endpoint_auth_method` as a public client, so a confidential client declaring
+  `client_secret_jwt` / `private_key_jwt` / `tls_client_auth` is silently mis-authenticated — and on a
+  server that *also* accepts public clients, succeeds-as-public when the user intended confidential
+  auth. Instead: **THROW** on (a) a defined-but-unsupported method, and (b) a confidential method
+  declared with no (or empty) secret. Two subtleties:
+  - The OIDC/RFC-6749-§2.3.1 default for an **OMITTED** method is **`client_secret_basic` when a
+    secret is present, `none` when it is not** — not unconditionally `none`. So a confidential client
+    that omits the method must still present its secret (Basic), not silently drop it.
+  - A **PRESENT-but-invalid** value (e.g. `null` from malformed/untrusted metadata) must NOT be
+    coalesced to the omitted default — compare **`=== undefined`**, never `?? "none"`. `null ?? "none"`
+    would accept a public path for a value that should fail closed. Apply the omitted-default only when
+    the field is genuinely `undefined`; any other present value falls through to the unsupported-method
+    guard and throws.
+
+Cited — the cross-app security-parity rollout (2026-06): the hardened `buildClientAuth` /
+`isEssNoUrlEncodeIssuer` / `isSupportedTokenEndpointAuthMethod` shipped in the pod-* apps'
+`webid-token-provider.ts` (+ adversarial `webid-client-auth.test.ts`, which asserts the spoofed host
+gets the SPEC encoder and that an unsupported method throws) and `@jeswr/solid-session-restore`'s
+fail-closed `buildClientAuth`. The reference `webid-token-provider.ts` here carries the same hardened
+helpers, with `webid-token-provider.test.ts` porting both the exact-host-spoof and fail-closed-method
+cases.
+
 ### Deep-link autologin (`#autologin/<webid>` on load) — full-page redirect, enforce the WebID
 
 A "send someone a link that logs them straight in as a known WebID" affordance (the pattern in
@@ -567,7 +607,11 @@ this skill:
    local CSS work** — the one thing the published provider cannot do. **E2E-verified**: a
    headless Playwright run drives the full popup login (WebID dialog → CSS login → consent →
    authenticated read) against a live local CSS, 3/3 stable — see
-   [`webid-token-provider.e2e.md`](./webid-token-provider.e2e.md) for the verification record.
+   [`webid-token-provider.e2e.md`](./webid-token-provider.e2e.md) for the verification record. Its
+   token-endpoint client-authentication helpers (`buildClientAuth` / `isEssNoUrlEncodeIssuer` /
+   `isSupportedTokenEndpointAuthMethod`) are exercised adversarially by the vitest suite
+   [`webid-token-provider.test.ts`](./webid-token-provider.test.ts) (20 tests — the exact-host-spoof
+   and fail-closed-auth-method cases; see the security section above).
    ```ts
    const manager = new ReactiveFetchManager([
      new WebIdDPoPTokenProvider(callbackUri, ui.getCode.bind(ui), promptWebIdDialog,
@@ -635,3 +679,5 @@ Copy both into `src/lib/` and build your UI on them. The behaviour to implement:
 | Silent-restore as a module fn can't arm the boundary | Inline `SessionProvider`-callback restore arms the boundary inline; a **module-level** restore fn must have `armBoundary`/`clearBoundary` **closures threaded in** — otherwise restore is green but the boundary stays un-armed (reactive) |
 | `@jeswr/solid-elements/auth` drags in `@jeswr/solid-session-restore` | The `/auth` subexport **statically imports** session-restore — that dep is required even for an app that doesn't use restore. In a bundler-constrained app (Next.js), importing `/auth` can duplicate `@solid/reactive-authentication`; **vendoring** the dependency-free boundary helpers is the escape hatch (keep it byte-equal + note the source) |
 | 401-budget test passes vacuously | Assert the seeded resources are actually private first (anon `GET` → `401`/`403`), seed **N ≥ plural** across >1 storage root and assert the 401 count **doesn't scale with N**, pin the exact local CSS version, and make a non-completing login a **hard** failure (opt-in skip only). Tally **responses** under the storage root. Watch the namespace-**scheme** seed gotcha (`https://` vs `http://` schema.org) — wrong scheme ⇒ resources parse but don't match ⇒ guard passes on an empty view |
+| Spoofable ESS host gate (substring `includes`) | Keying a per-vendor token-endpoint workaround on `issuer.includes("login.inrupt.com")` sends the bespoke (non-URL-encoded Basic) `client_secret` to a lookalike host (`login.inrupt.com.attacker.example`, `evil.example/login.inrupt.com/…`). Match the **EXACT hostname** — `new URL(issuer).hostname === "login.inrupt.com"` (unparseable → `false`) — never a substring |
+| Client-auth method silently downgraded to `none` | `if (method === "client_secret_basic") {…} else None()` mis-authenticates a confidential client that declares `client_secret_jwt`/`private_key_jwt`/`tls_client_auth` (and succeeds-as-public on servers that allow it). **FAIL CLOSED**: throw on an unsupported method and on a confidential method with no secret. OMITTED method defaults to `client_secret_basic` **iff** a secret is present (else `none`); a PRESENT-but-invalid value (`null`) must compare **`=== undefined`** (never `?? "none"`) so it fails closed, not coalesces to public |

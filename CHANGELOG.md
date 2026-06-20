@@ -1,5 +1,32 @@
 # Changelog
 
+## [Unreleased] - 2026-06-20 (1)
+
+### Security
+
+- **`solid-reactive-authentication` skill** — backported the cross-app token-endpoint
+  client-authentication hardening into the source-of-truth reference `webid-token-provider.ts`, which
+  had drifted behind the shipped (and roborev-passed) pod-* apps + `@jeswr/solid-session-restore`.
+  Two security-critical fixes:
+  1. **Spoofable ESS host gate → EXACT hostname.** `clientSecretBasicFor` keyed the Inrupt ESS
+     `client_secret_basic` no-url-encode workaround on `issuer.includes("login.inrupt.com")`, a
+     SUBSTRING match a lookalike host (`login.inrupt.com.attacker.example`,
+     `evil.example/login.inrupt.com/…`) satisfies — leaking a non-standard Basic `client_secret`
+     credential to the wrong server. Replaced with `new URL(issuer).hostname === "login.inrupt.com"`
+     (exported `isEssNoUrlEncodeIssuer`; unparseable issuer → `false`).
+  2. **Silent downgrade to `none` → FAIL-CLOSED method selection.** `#clientAuth` returned
+     `oauth.None()` for any unrecognised `token_endpoint_auth_method`, silently mis-authenticating a
+     confidential client declaring `client_secret_jwt`/`private_key_jwt`/`tls_client_auth`. Replaced
+     with a pure, exported `buildClientAuth` (+ `isSupportedTokenEndpointAuthMethod`) that THROWS on
+     an unsupported method and on a confidential method with no secret; OMITTED method defaults to
+     `client_secret_basic` only when a secret is present (else `none`); a present-but-invalid value
+     (`null`) compares `=== undefined` (never `?? "none"`) so it fails closed.
+  Added `webid-token-provider.test.ts` (20 cases ported from pod-health's `webid-client-auth.test.ts`)
+  covering the exact-host-spoof and fail-closed-method paths, and a new SKILL.md section
+  "Token-endpoint client auth: EXACT-host gates + a FAIL-CLOSED auth-method selection" + two gotchas
+  rows. Cited: the cross-app security-parity rollout (pod-* `webid-token-provider.ts` /
+  `webid-client-auth.test.ts`; `@jeswr/solid-session-restore`'s `buildClientAuth`).
+
 ## [Unreleased] - 2026-06-19 (1)
 
 ### Changed
