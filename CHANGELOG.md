@@ -1,5 +1,50 @@
 # Changelog
 
+## [Unreleased] - 2026-06-21 (4)
+
+### Added
+
+Three portable lessons folded in from building Solid into five OSS app forks (Linkding, Elk,
+Excalidraw, Miniflux, Actual — 2026-06; auth + offline paths hardened over many roborev rounds). Two
+of the surveyed candidates were skipped as already covered: (B) "scope the authed fetch / don't
+globally patch fetch / restore on teardown" — the "Cross-account DPoP-token leak" (one app-lifetime
+singleton, patch once, idempotent connect, logout clears session-state not the patch), "Foreign-origin
+fetch", and StrictMode-pristine-snapshot sections already cover this; and the reset-on-logout /
+generation-fence / atomic-commit halves of candidate (A), already in those same sections + the
+`@jeswr/solid-session-restore` section.
+
+- **`solid-app-shell` skill** — new section "Flush a debounced write on tab teardown — don't lose the
+  last edit" + three gotchas rows. A debounced/coalesced pod write whose timer hasn't fired is **lost**
+  if the user closes the tab / navigates / backgrounds it mid-debounce. Flush on `pagehide` **and**
+  `visibilitychange→hidden` (mobile-reliable) with `fetch(url,{keepalive:true})` so the request
+  outlives the page; respect `keepalive`'s hard ~64 KB encoded-body cap (over it the fetch rejects —
+  encode first, fall back to a normal fetch when oversized; `sendBeacon` shares the cap and can't carry
+  the `If-Match`/`Content-Type` a pod PUT needs); clear the pending marker only AFTER the write resolves
+  (keep it for retry); coalesce concurrent unload flushes of the same snapshot (one teardown = one
+  request) but never coalesce a keepalive flush onto a non-keepalive in-flight save. The teardown corner
+  of the optimistic-mutation / `solid-offline` invariant. Cited: the five jeswr OSS Solid forks
+  (Excalidraw's debounced scene-persist needed it).
+
+- **`solid-reactive-authentication` skill** — new section "A restore must yield an AUTHENTICATED,
+  refresh-capable fetch — not just a WebID" + one gotcha row. The often-forgotten *positive* obligation
+  of session restore: a restore that resolves the refresh credential, learns the WebID, then mounts the
+  app on a **bare/unpatched** fetch silently leaves every pod request unauthenticated (first read 401s
+  / pops an interactive login on load). Restore must end with the manager's provider armed with the
+  restored session (and/or the proactive boundary armed) so the patch attaches the token; and the
+  restored fetch must be **refresh-capable** — on a 401/expiry re-mint via the refresh credential
+  through the **default/pristine** fetch (never the expired restored one) and retry **once**. Scoped to
+  the new core only — the reset/fence/atomic halves cross-reference the existing cross-account-leak +
+  session-restore sections rather than re-deriving them. Cited: the five jeswr OSS Solid forks (Elk's
+  restore returned the WebID but mounted on the bare fetch so the first timeline read 401'd).
+
+- **`AGENTS.md` §Writing data** — new bullet: an app that already persists through an
+  `unstorage`/KV interface (Nuxt/Nitro `useStorage()`, or a debounced localStorage-style KV
+  orchestrator) can route it at a pod **without rewriting call sites** by registering
+  [`@jeswr/unstorage-solid`](https://github.com/jeswr/unstorage-solid)'s `defineDriver()` KV-over-LDP
+  driver pointed at a pod container with an injectable authed fetch (the driver parses the LDP listing
+  via `@jeswr/fetch-rdf` + `@solid/object`). The lowest-friction first integration step for an existing
+  KV app; full read-shaped RDF still graduates to the typed read-modify-write path.
+
 ## [Unreleased] - 2026-06-21 (3)
 
 ### Added

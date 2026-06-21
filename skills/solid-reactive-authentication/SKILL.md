@@ -188,6 +188,36 @@ then restore it. (Cited: `@jeswr/solid-session-restore` — `IndexedDbSessionSto
 non-extractable DPoP keypair, `restoreSession.test.ts` drives the real refresh grant over a stubbed
 transport; validated across the 7 vite pod-apps + the package extraction from the pod-mail pilot.)
 
+### A restore must yield an AUTHENTICATED, refresh-capable fetch — not just a WebID
+
+The sharp, easy-to-miss half of session restore: restoring a session is **not** recovering the WebID
+— it is recovering the ability to make **authenticated** pod requests. A restore path that resolves
+the persisted refresh credential, learns the WebID, and then **mounts the app with a bare / unpatched
+global `fetch`** silently leaves every pod request **unauthenticated**: the first read `401`s (or pops
+an interactive login on page load) even though the refresh token was valid the whole time. The restore
+must end with a DPoP-**authenticated** fetch installed/armed — under the reactive-fetch model that means
+the singleton manager's provider is armed with the restored session (so the global patch attaches the
+token), and/or the proactive boundary is armed (see "Eliminating the per-resource 401-dance"); under a
+non-patched model it means the restored authed fetch is the one your pod calls actually use. **Returning
+only the WebID from `restoreSession` and forgetting to arm the fetch is the trap.**
+
+- **Make the restored fetch REFRESH-CAPABLE.** A restored access token is short-lived and may already
+  be near expiry. On a `401`/expiry the fetch must **re-mint** via the refresh credential and **retry
+  once** — and crucially mint the new token through the **DEFAULT/pristine** fetch (the
+  `customFetch`/`MODULE_PRISTINE_FETCH` reference, see the re-entrancy section), **never through the
+  expired restored fetch** (which would re-enter the dead-token path). One bounded retry, not a loop.
+- **Arming is on the same fail-closed footing as the rest of restore.** If the wiring that arms the
+  fetch throws **after** the credential resolved, you get the armed-then-fail FAIL-OPEN split — handle
+  it exactly as that section says (`provider.reset()` + clear the boundary on every failure path).
+- The reset-on-logout/switch, generation-fence, and atomic-commit halves of "restore safely" are
+  already covered above (the cross-account-leak + `@jeswr/solid-session-restore` sections) — this rule
+  is only the often-forgotten *positive* obligation: the thing you hand the app after a restore is an
+  **authenticated, self-refreshing** fetch, not a WebID string.
+
+(Cited: the five jeswr OSS Solid forks — Linkding, Elk, Excalidraw, Miniflux, Actual — 2026-06; Elk's
+restore returned the WebID but mounted on the bare fetch so the first timeline read 401'd, fixed over
+roborev's auth-lifecycle rounds.)
+
 ### Token-endpoint client auth: EXACT-host gates + a FAIL-CLOSED auth-method selection
 
 Two security rules for any code that picks how a confidential client authenticates to the token
@@ -741,6 +771,7 @@ from the persisted session.)
 | Deep-link autologin logs in as the WRONG WebID | A live IdP cookie session for another account satisfies `prompt=none` — **enforce** that the ID-token WebID `webIdsEqual` the requested one and **throw before writing any session/issuer state** on mismatch; validate `state` on the error/abort return too |
 | Silent restore breaks with `"key is not extractable"` | The DPoP **public** key must be `extractable: true` (oauth4webapi serialises it into the proof JWK, RFC 9449 §4.2) while the **private** key stays non-extractable. `generateKey(…, false, …)` gets this right; the full-page-redirect export/re-import must re-import private `false` / public `true` (NOT both `true`). Test: public exports to JWK, private `exportKey` rejects |
 | Hand-rolled per-app session restore | Use the shared, audited **[`@jeswr/solid-session-restore`](https://github.com/jeswr/solid-session-restore)** (WebID-scoped IndexedDB store + pure `decideSilentRestore` + DPoP-bound `restoreSession`) — apps do thin wiring (confirm-then-persist, ordered awaited logout, `shouldDropRememberedPointer` reconciliation), never their own crypto/persistence |
+| Restore succeeds but the first pod read still 401s | Restore must yield an **authenticated** fetch, not just a WebID — arm the singleton manager's provider with the restored session (and/or the proactive boundary) so the global patch attaches the token; mounting on a bare/unpatched fetch leaves pod requests unauthenticated. Make it **refresh-capable**: on a 401/expiry re-mint via the refresh credential through the **default/pristine** fetch (never the expired restored one) and retry **once** |
 | Per-resource 401-dance (an extra round-trip per URL, scales with resource count) | `ReactiveFetchManager` is reactive (bare → `401` → upgrade → retry, **per resource, no origin cache**). Proactively attach the token on the **first** request to an **allowed** origin via `installProactiveAuthFetch` (`@jeswr/solid-elements/auth`), keeping one bounded `401` re-upgrade — collapses N extra round-trips to one auth round-trip per storage root |
 | Proactive attach leaks a token to a foreign (or issuer) origin | The allow-set is the whole boundary (the token goes on before any `401`): **`https:`-only**, loopback-`http:` only under an explicit dev/test opt-in, **empty set ⇒ attach to nothing** (fail-closed), **resource origins only**. Derive it from the **pod-root/storage origin(s)** (+ the WebID-document origin only when the pod serves it) — **NOT the OIDC issuer origin** (a pod token has no audience there, and issuer HTTP must stay on the pinned `customFetch`) |
 | Patching fetch to attach tokens DEADLOCKS login | Internal OIDC HTTP (token endpoint, JWKS) re-enters the attach path. Pin `oauth4webapi`'s **`customFetch`** (and any internal OIDC fetch) to the **pristine/unpatched** fetch captured before `installProactiveAuthFetch`. Add an adversarial test that hangs/fails **without** the pin |

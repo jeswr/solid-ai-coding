@@ -96,6 +96,45 @@ unrelated re-render produces a fresh object reference and must not look like "a 
 Equivalently, a per-item mutation id works: stamp each optimistic write with an id, and only revert
 when the item's current pending-mutation id still equals the failed write's.
 
+## Flush a debounced write on tab teardown — don't lose the last edit
+
+An optimistic mutation that **debounces** the pod write (coalescing rapid edits into one PUT) has a
+gap the optimistic path itself doesn't cover: if the user **closes the tab, navigates away, or
+backgrounds it** while a debounced write is still pending, the timer never fires and the **last edit
+is lost** — the UI showed "Saving…" (or even "Saved" optimistically) but nothing reached the pod. The
+durable cache (`solid-offline`) preserves it for *that* browser, but a different device never sees it.
+
+Flush pending writes on the teardown signals — and mind the `keepalive` body cap:
+
+- **Flush on `pagehide` AND `visibilitychange` → `hidden` (and `beforeunload` as a belt-and-braces).**
+  `visibilitychange(hidden)` is the most reliable on mobile (a backgrounded tab the OS may kill never
+  fires `pagehide`/`unload`); `pagehide` covers tab-close/navigation. Treat them as the same "the page
+  may be going away now — persist now" trigger and de-dupe (below).
+- **Use `fetch(url, { keepalive: true })` so the request OUTLIVES the page** — a normal `fetch` is
+  cancelled when the document tears down, so the write never completes. `keepalive` lets the browser
+  finish it after the page is gone. **But `keepalive` has a hard ~64 KB cap on the encoded request
+  body** (the Fetch spec's `keepalive` inflight-body limit) — over it the `fetch` **rejects**. So:
+  encode the body first, and use `keepalive` **only when it fits**; an oversized snapshot falls back
+  to a **normal** `fetch` (best-effort — it may not finish, but it can't silently swallow the write).
+  (`navigator.sendBeacon` is the same cap and can't send the conditional `If-Match`/`Content-Type`
+  headers a pod PUT needs, so prefer `keepalive` `fetch`.)
+- **Clear the pending marker only AFTER the write resolves — keep it for retry on failure.** A teardown
+  flush that optimistically marks the snapshot "saved" before the keepalive request resolves loses the
+  edit if that request fails; leave the durable-cache pending flag set until success so the next open
+  retries.
+- **Coalesce concurrent unload flushes of the SAME snapshot.** `pagehide` and `visibilitychange` can
+  both fire for one teardown; firing two keepalive PUTs of the same body **doubles** the bytes counted
+  against the per-page keepalive cap (and can race the conditional `If-Match`). Single-flight the flush
+  on the snapshot's identity/version so one teardown sends **one** request. **But never coalesce a
+  keepalive flush onto a non-keepalive in-flight save** — a normal debounced save already in flight is
+  cancelled by the teardown, so the keepalive flush must still run; only coalesce keepalive-with-keepalive.
+
+This is the teardown corner of the optimistic-mutation / `solid-offline` invariant: optimistic +
+durable-cache makes the edit *survive locally*; the keepalive flush is what makes it *reach the pod*
+when the tab dies mid-debounce. (Cited: the five jeswr OSS Solid forks — Linkding, Elk, Excalidraw,
+Miniflux, Actual — 2026-06; Excalidraw's debounced scene-persist needed the `pagehide` keepalive
+flush + the 64 KB cap fallback, hardened over roborev's fetch/unload rounds.)
+
 ## Indicator, no-ops, and reconciliation
 
 - **A move that doesn't change anything is a no-op** — a drop onto the card's *current* column must
@@ -476,6 +515,9 @@ aliasing the `--as-*` seam onto their own colours rather than adopting the suite
 | Spurious "Saving…" on a no-op drop | A move to the current column changes nothing — detect it (no `original`) and skip the write |
 | Indicator clutters the UI | Hide when idle; auto-clear "Saved" back to idle after ~1.5 s; fixed-corner pill, `aria-live="polite"`, not a modal |
 | Coupled server change missing after persist | Background-reconcile on success — the server may have changed a field your write didn't set |
+| Last edit lost when the tab is closed mid-debounce | A debounced pod write whose timer hasn't fired is lost on tab-close/navigate/background. Flush on `pagehide` **and** `visibilitychange→hidden` (mobile-reliable) with `fetch(url,{keepalive:true})` so the request outlives the page; clear the pending marker only AFTER it resolves (keep it for retry) |
+| `keepalive` flush rejects on a big body | `keepalive` has a hard ~64 KB encoded-body cap — over it the `fetch` rejects and the write silently never sends. Encode first, use `keepalive` only when it fits; an oversized snapshot falls back to a **normal** `fetch` (best-effort). `sendBeacon` has the same cap and can't carry the `If-Match`/`Content-Type` a pod PUT needs |
+| Two keepalive PUTs of one snapshot blow the cap | `pagehide` + `visibilitychange` both fire for one teardown — single-flight the flush on the snapshot's version so one teardown = one request. But never coalesce a keepalive flush onto a non-keepalive in-flight save (the normal save is cancelled by the teardown; the keepalive flush must still run) |
 
 ---
 

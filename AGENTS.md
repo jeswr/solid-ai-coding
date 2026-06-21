@@ -345,6 +345,17 @@ Two suffix conventions, and they run in **opposite directions**:
   `@solid/object` yet — use the compile-verified `TypeIndexDataset` implementation in the
   bundled `solid-type-index` skill; for your own app's data, derive paths from the pod root as
   above.
+- **Adding a pod backend to an app that already uses a KV/unstorage store?** If the app persists
+  through an [`unstorage`](https://unstorage.unjs.io) / KV interface (a Nuxt/Nitro `useStorage()`
+  app, or any debounced `localStorage`-style key-value orchestrator), you can route it at a pod
+  **without rewriting the call sites**: register
+  [`@jeswr/unstorage-solid`](https://github.com/jeswr/unstorage-solid)'s `defineDriver()` KV-over-LDP
+  driver, pointed at a pod container, with your authenticated `fetch` injected — existing
+  `storage.getItem`/`setItem`/`getKeys`/`clear` calls then read/write pod resources (the driver parses
+  the LDP container listing via `@jeswr/fetch-rdf` + `@solid/object`). It is the lowest-friction first
+  integration step for an existing KV app; for full read-shaped RDF data you still graduate to the
+  typed read-modify-write path above. (`npm install github:jeswr/unstorage-solid#main` — committed
+  self-contained `dist/`.)
 
 ### Access control (WAC / ACP)
 
