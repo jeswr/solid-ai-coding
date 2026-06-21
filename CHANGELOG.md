@@ -1,5 +1,23 @@
 # Changelog
 
+## [Unreleased] - 2026-06-21 (1)
+
+### Added
+
+- **`solid-reactive-authentication` skill** — new section "Integrating Solid-OIDC DPoP into an auth
+  framework (Auth.js / next-auth v5)" + three gotchas rows, plus an Auth.js mention in the skill
+  description. Covers the case where the app's auth framework runs the OAuth flow itself and has no
+  DPoP, but Solid-OIDC tokens are mandatorily DPoP-bound (RFC 9449): the integration seam is the
+  provider's **`customFetch`** symbol (discriminate the token-endpoint leg and attach a proof there);
+  the token-endpoint proof carries **no `ath`** (it binds `htu`/`htm` only, RFC 9449 §4.2 — `ath` is
+  resource-leg only) and handles the §8 `use_dpop_nonce` retry **exactly once**; map **only the
+  verified `webid` ID-token claim** to the user (fail-closed); the DPoP keypair must persist across
+  the auth-code→callback→refresh lifecycle (JWT-session vs server-side key-store tradeoff); and the
+  packaging gotcha that `@auth/core`'s `customFetch` named export only exists from **0.37.0** while
+  npm's `latest` can lag (observed `0.34.3`) — pin `@auth/core@^0.37` or use `next-auth@^5`. Cited:
+  the worked reference [`@jeswr/auth-solid`](https://github.com/jeswr/auth-solid) (composes
+  [`@jeswr/solid-dpop`](https://github.com/jeswr/solid-dpop) for the RFC 9449 proofs).
+
 ## [Unreleased] - 2026-06-20 (1)
 
 ### Security

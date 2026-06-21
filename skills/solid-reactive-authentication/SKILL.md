@@ -1,7 +1,7 @@
 ---
 name: solid-reactive-authentication
 description: >-
-  Use when implementing Solid login — importing @solid/reactive-authentication, mounting <authorization-code-flow>, designing the WebID entry / identity-provider selection UX, or debugging 'Unknown issuer' or auth-after-reload behaviour. Documents the published 0.1.x API: not in context7, and the repo demos track unreleased APIs.
+  Use when implementing Solid login — importing @solid/reactive-authentication, mounting <authorization-code-flow>, designing the WebID entry / identity-provider selection UX, integrating Solid-OIDC's mandatory DPoP into an auth framework that has none (Auth.js / next-auth v5 / @auth/core via the customFetch seam), or debugging 'Unknown issuer' or auth-after-reload behaviour. Documents the published 0.1.x API: not in context7, and the repo demos track unreleased APIs.
 ---
 
 # @solid/reactive-authentication — auth via a patched fetch
@@ -648,6 +648,53 @@ Copy both into `src/lib/` and build your UI on them. The behaviour to implement:
 6. **Storage selection.** When the profile advertises more than one `pim:storage`, **ask the
    user which storage to use** — never pick one silently. Remember the choice per account.
 
+## Integrating Solid-OIDC DPoP into an auth framework (Auth.js / next-auth v5)
+
+Everything above is the **reactive-fetch** model (a `globalThis.fetch` patch you own). The other
+common case is an app built on an **auth framework that runs the OAuth/OIDC flow itself** — Auth.js
+(next-auth v5 / `@auth/core`). Auth.js owns the authorization-code/callback orchestration and has
+**no DPoP support**, but Solid-OIDC tokens are **mandatorily DPoP-bound (RFC 9449)** — so you can't
+just point Auth.js at a Solid issuer. The worked reference for this is
+[`@jeswr/auth-solid`](https://github.com/jeswr/auth-solid) (composes
+[`@jeswr/solid-dpop`](https://github.com/jeswr/solid-dpop) for the proof primitives — no hand-rolled
+crypto); the load-bearing constraints:
+
+- **The seam is the provider's `customFetch` symbol.** Auth.js routes *all* OAuth endpoint HTTP
+  (discovery, JWKS, token, userinfo) through the [`customFetch`](https://authjs.dev/reference/core#customfetch)
+  override on the provider config. That is the single integration point: install a fetch that
+  **discriminates the token-endpoint leg** (a POST with a form-urlencoded grant body) and attaches a
+  DPoP proof to it, passing every other leg straight through. Don't try to bolt DPoP on anywhere
+  else — Auth.js does the rest of the flow.
+- **The token-endpoint proof carries NO `ath`.** `ath` (the access-token hash) only belongs on the
+  **resource leg** (pod requests), where an access token is being *presented* — at the token
+  endpoint there is no access token yet, so the proof binds only `htu`/`htm` (RFC 9449 §4.2).
+  (This is the inverse of the common server-side `ath`-compat gotcha: clients must *omit* `ath` here,
+  not add it.) Handle the RFC 9449 §8 **`use_dpop_nonce` 401 retry exactly once** (a single retry,
+  not a loop) at the token endpoint — the OP may demand a server-chosen nonce on the first attempt.
+- **Map ONLY the verified `webid` claim to the user.** Read the WebID from the **verified ID-token
+  claims** the framework passes to `profile()` (oauth4webapi validates the ID-token signature +
+  `iss`/`aud`/`nonce` first) — **fail-closed: a login with no resolvable `webid` throws.** Never
+  trust a `webid` field from the *unverified* access token.
+- **The DPoP keypair must persist across the auth-code → callback → refresh lifecycle — document the
+  tradeoff.** Pod requests after login (and the DPoP-`jkt`-bound refresh-token redemption after a
+  restart) need the **same** DPoP private key that minted the grant's proofs. One option is to store
+  the DPoP private JWK in the **JWT session** alongside the tokens (`@jeswr/auth-solid`'s default):
+  Auth.js encrypts the JWT (A256GCM) with `AUTH_SECRET`, so set a strong secret — the cost is JWT
+  size and the key living in the session cookie/store. The alternative is a **server-side key store**
+  (a database session row holding `dpopKeyJwk` + tokens). Either way it is secret material — never
+  log it, never surface it to the client (expose only the WebID on the session).
+- **The packaging gotcha — `@auth/core`'s `customFetch` named export only exists from `0.37.0`.**
+  npm's `latest` dist-tag for `@auth/core` can lag (observed `0.34.3`), and that version does **not**
+  export `customFetch` — a bare `npm install @auth/core` then breaks the import with
+  `does not provide an export named 'customFetch'`. Pin a peer floor `>=0.37` (install
+  `@auth/core@^0.37`), or install `next-auth@^5` (its bundled `@auth/core` is recent and re-exports
+  `customFetch`).
+
+(Cited: [`@jeswr/auth-solid`](https://github.com/jeswr/auth-solid) — `Solid(config)` returns an
+Auth.js `OIDCConfig` with the DPoP-injecting `customFetch`; composes `@jeswr/solid-dpop` for the
+RFC 9449 proofs; verified-WebID-only, fail-closed; ships a `solidDpopFetch` for authed pod requests
+from the persisted session.)
+
 ## Gotchas
 
 | Gotcha | Detail |
@@ -681,3 +728,6 @@ Copy both into `src/lib/` and build your UI on them. The behaviour to implement:
 | 401-budget test passes vacuously | Assert the seeded resources are actually private first (anon `GET` → `401`/`403`), seed **N ≥ plural** across >1 storage root and assert the 401 count **doesn't scale with N**, pin the exact local CSS version, and make a non-completing login a **hard** failure (opt-in skip only). Tally **responses** under the storage root. Watch the namespace-**scheme** seed gotcha (`https://` vs `http://` schema.org) — wrong scheme ⇒ resources parse but don't match ⇒ guard passes on an empty view |
 | Spoofable ESS host gate (substring `includes`) | Keying a per-vendor token-endpoint workaround on `issuer.includes("login.inrupt.com")` sends the bespoke (non-URL-encoded Basic) `client_secret` to a lookalike host (`login.inrupt.com.attacker.example`, `evil.example/login.inrupt.com/…`). Match the **EXACT hostname** — `new URL(issuer).hostname === "login.inrupt.com"` (unparseable → `false`) — never a substring |
 | Client-auth method silently downgraded to `none` | `if (method === "client_secret_basic") {…} else None()` mis-authenticates a confidential client that declares `client_secret_jwt`/`private_key_jwt`/`tls_client_auth` (and succeeds-as-public on servers that allow it). **FAIL CLOSED**: throw on an unsupported method and on a confidential method with no secret. OMITTED method defaults to `client_secret_basic` **iff** a secret is present (else `none`); a PRESENT-but-invalid value (`null`) must compare **`=== undefined`** (never `?? "none"`) so it fails closed, not coalesces to public |
+| Auth.js (next-auth v5) can't talk to a Solid issuer | Auth.js runs the OAuth flow itself with **no DPoP**, but Solid-OIDC tokens are mandatorily DPoP-bound. Inject the RFC 9449 proof through the provider's **`customFetch`** seam (it routes all OAuth HTTP), discriminating the **token-endpoint leg** only. See the Auth.js section + [`@jeswr/auth-solid`](https://github.com/jeswr/auth-solid) |
+| Token-endpoint DPoP proof has `ath` (wrong) | `ath` (access-token hash) belongs **only on the resource leg** (pod requests presenting a token). At the token endpoint there is no access token yet — the proof binds `htu`/`htm` only (RFC 9449 §4.2). Handle the §8 `use_dpop_nonce` retry **exactly once** there |
+| `does not provide an export named 'customFetch'` | `@auth/core`'s `customFetch` is a named export only from **0.37.0**, but npm's `latest` can lag (observed `0.34.3`). Pin `@auth/core@^0.37` (peer floor `>=0.37`) or install `next-auth@^5` (recent bundled `@auth/core` re-exports it) |
