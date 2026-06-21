@@ -1,5 +1,25 @@
 # Changelog
 
+## [Unreleased] - 2026-06-21 (3)
+
+### Added
+
+- **`AGENTS.md` §Access control** — new subsection "Writing OWNER-PRIVATE data — the fail-closed ACL
+  recipe". When an app writes data meant to be the user's alone, a sloppy ACL write defaults to
+  **fail-OPEN** (the resource silently inherits a parent's permission or stays world-readable). The
+  recipe: establish the **container's** owner-only ACL once up front as a backstop (`acl:accessTo` +
+  `acl:default`, so a child created in the create→acl window inherits owner-only); write the resource
+  **body first, then PUT its `.acl`** (many WAC servers reject an `.acl` write for a not-yet-existent
+  resource); `putAcl` must **THROW on any non-2xx** — never swallow a 4xx (a swallowed failure leaves
+  the resource under inherited/public perms — the fail-open bug); if you support an "ACL is already
+  owner-private" escape path, validate it **POSITIVELY** (an authorization with owner `acl:agent` ==
+  the WebID holding Read+Write+Control, covering `acl:accessTo` **and** `acl:default` checked
+  INDEPENDENTLY, REJECTING any `acl:agentClass`/`acl:agentGroup`/foreign-`acl:agent` grant — a
+  NEGATIVE "no agentClass present" check is a fail-open trap); build the ACL with `n3.Writer` over
+  typed quads, never hand-concatenated triples. Cited as validated across five jeswr OSS Solid forks
+  (Linkding, Elk, Excalidraw, Miniflux, Actual — 2026-06; roborev caught a fail-open variant in the
+  first cut of every one).
+
 ## [Unreleased] - 2026-06-21 (2)
 
 ### Added

@@ -371,6 +371,36 @@ private — never fall back to "open". And question whether your app should modi
 all — sharing flows are better delegated to a dedicated, well-tested authorisation app where one
 exists; if you do write ACLs, write them through the typed classes only.
 
+#### Writing OWNER-PRIVATE data — the fail-closed ACL recipe
+
+When your app writes data that is meant to be the user's alone (no public read, no other agent), a
+sloppy ACL write defaults to **fail-OPEN** — the resource silently inherits a parent's
+permissions or stays world-readable. This was the single most-repeated review finding building five
+OSS Solid forks (Linkding, Elk, Excalidraw, Miniflux, Actual — 2026-06): the first cut of *every*
+one shipped a fail-open variant. The fail-closed recipe:
+
+- **Establish the container's owner-only ACL once, up front, as a backstop.** Before writing any
+  child, ensure the enclosing container's `.acl` grants only the user (`acl:agent` = WebID, modes
+  Read/Write/Control) on **both** `acl:accessTo` **and** `acl:default`. The `acl:default` term is
+  what makes a child created in the create→write-acl window inherit owner-only instead of
+  public/inherited.
+- **Write the resource BODY first, then PUT its `.acl`.** Many WAC servers reject an `.acl` write
+  for a resource that does not yet exist (the ACL's `acl:accessTo` target must resolve). Body →
+  then per-resource ACL.
+- **`putAcl` must THROW on any non-2xx — never swallow a 4xx.** A swallowed ACL-write failure
+  leaves the resource under whatever inherited/default permission existed — the fail-open bug.
+  Surface the error and treat the write as failed.
+- **If you support an "ACL is already owner-private" escape path** (e.g. a server that `405`s ACL
+  writes, so you accept a pre-existing owner-only ACL instead of writing one), validate it
+  **POSITIVELY**: require an authorization whose `acl:agent` equals the user's WebID and holds
+  Read+Write+Control, covering `acl:accessTo` **AND** `acl:default` — checked **independently**, as
+  WAC may split them across separate authorizations — and **reject** any `acl:agentClass`
+  (`foaf:Agent` / `acl:AuthenticatedAgent`), `acl:agentGroup`, or foreign-`acl:agent` grant. A
+  NEGATIVE check ("no `acl:agentClass` is present") is a fail-open trap: it passes a document that
+  grants the owner nothing, or grants access via a predicate you didn't enumerate.
+- **Build the ACL with `n3.Writer` over typed quads, never hand-concatenated triples** (the house
+  rule above). Read existing ACLs through `@solid/object`'s `AclResource` / `Authorization`.
+
 Name resources with URI-safe characters only — a `:` in a resource name breaks ACL matching on
 some servers and surfaces as an unexplainable `403`.
 
