@@ -118,11 +118,32 @@ Cursor, Zed, Windsurf, Gemini CLI, GitHub Copilot coding agent, Devin, and a gro
 ## Solid skills
 
 This repo bundles twelve [Agent Skills](https://agentskills.io/) under [`skills/`](./skills/)
-that go deeper than the guide — install them into your agent with:
+that go deeper than the guide.
+
+### Install into any project
+
+These skills are distributed through the [Agent Skills](https://agentskills.io/) discovery
+protocol, so a single command installs the whole bundle into any agent that supports it
+([Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview),
+[OpenAI Codex](https://github.com/openai/codex), [IBM Bob](https://www.ibm.com/products/bob),
+and others):
+
+```sh
+npx skills add jeswr/solid-ai-coding
+```
+
+Target one or more agents explicitly with `-a` (otherwise the CLI prompts):
 
 ```sh
 npx skills add jeswr/solid-ai-coding -a claude-code -a codex -a bob
 ```
+
+Add a single skill with `--skill`, e.g. `npx skills add jeswr/solid-ai-coding --skill solid-fetch-rdf`.
+
+> The skill bundle complements — it does not replace — the [`AGENTS.md`](./AGENTS.md) guide.
+> Install the guide first ([above](#use-it-in-your-project)), then add the skills.
+
+### The bundle
 
 | Skill | Covers |
 |---|---|
