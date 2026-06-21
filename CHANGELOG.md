@@ -1,5 +1,24 @@
 # Changelog
 
+## [Unreleased] - 2026-06-21 (2)
+
+### Added
+
+- **`solid-reactive-authentication` skill** — generalized the `customFetch` re-entrancy pin into a
+  standalone principle (a blockquote after the proactive-attach `customFetch` section + a Gotchas
+  row): when an app/extension proactively monkey-patches `globalThis.fetch` to attach Solid auth, the
+  OIDC library makes its **own** internal `fetch` calls (discovery / JWKS / token-endpoint exchange /
+  refresh) and routing those through the patched global causes recursion (deadlock) or a DPoP proof
+  bound to the wrong `htu` (the issuer, not a resource). Fix: capture a **pristine `fetch` BEFORE
+  patching** (the `MODULE_PRISTINE_FETCH` module-load snapshot) and route the library's internal HTTP
+  through it — pin `oauth4webapi`'s **`customFetch`** (`unique symbol`, used as `[customFetch]`), **or**
+  segregate the OIDC flow into a separate realm on the raw fetch. Cited and source-verified against the
+  [Solid browser extension](https://github.com/jeswr/solid-browser-extension) (`MODULE_PRISTINE_FETCH`
+  in the popup message-bridge controller + the SW's explicit `RE-ENTRANCY: … use the RAW fetch, never
+  the authenticatedFetch path` rule) and the `[customFetch]` seam in
+  [`@jeswr/auth-solid`](https://github.com/jeswr/auth-solid) /
+  [`@jeswr/solid-openid-client`](https://github.com/jeswr/solid-openid-client).
+
 ## [Unreleased] - 2026-06-21 (1)
 
 ### Added

@@ -504,6 +504,29 @@ reference the foreign-origin section captures. Add an **adversarial test** that 
 the pin in place (passes) and **without** it (must hang/deadlock or fail) so the pin can't silently
 regress.
 
+> **The general principle (applies to ANY proactive global-`fetch` patch, not just the proactive-attach
+> helper).** The moment your app monkey-patches `globalThis.fetch` to transparently attach Solid auth,
+> the **OIDC library makes its own internal `fetch` calls** — discovery, JWKS, the token-endpoint
+> exchange, the refresh grant — and if *those* go through the patched global, the wrapper wrongly
+> intercepts the library's own bootstrap requests: it recurses into the attach path (needs a token it
+> is mid-mint of → deadlock), or attaches a DPoP proof bound to the *wrong* `htu` (the issuer, not a
+> resource). The fix is the same two-part reflex everywhere: (1) capture a **pristine reference to the
+> original `fetch` BEFORE patching** (a module-load snapshot, the "MODULE_PRISTINE_FETCH" pattern), and
+> (2) hand that pristine fetch to the auth library so its internal HTTP **bypasses the global patch** —
+> for `oauth4webapi`-based libraries that is its **`customFetch`** option (exported as a `unique symbol`,
+> used as `[customFetch]`; this is exactly the seam `@jeswr/auth-solid`'s `[customFetch]: dpopFetch` and
+> `@jeswr/solid-openid-client`'s `[oidc.customFetch]` set). The token then only ever reaches a vetted
+> **resource** origin, never the issuer's endpoints. *(Architectural variant — the same invariant, no
+> `customFetch` needed.* The [Solid browser extension](https://github.com/jeswr/solid-browser-extension)
+> hand-rolls its OIDC flow in the MV3 **service worker** (`jose` + raw `fetch`) and keeps the
+> token-attaching path in a **separate realm** from the OIDC HTTP: the SW's
+> [`service-worker.ts`](https://github.com/jeswr/solid-browser-extension/blob/main/src/background/service-worker.ts)
+> documents the rule as `RE-ENTRANCY: discovery / token / refresh / profile fetches use the RAW fetch,
+> never the authenticatedFetch path`, while the popup's `MODULE_PRISTINE_FETCH` snapshot — captured at
+> module load *before* anything could patch the global — backs its credential-free public/foreign-origin
+> reads. Whether you pin `customFetch` or segregate by realm, the invariant is identical: **the auth
+> library's own bootstrap HTTP must run on a fetch that is NOT your token-attaching wrapper.*)
+
 **The armed-then-fail FAIL-OPEN gap — a real roborev-HIGH.** A wiring fault can throw **after** the
 boundary has been armed AND the token pinned, but **before** the UI commits to logged-in. That
 leaves the *provider able to authenticate* (boundary armed, token live) while the *UI falls back to
@@ -721,6 +744,7 @@ from the persisted session.)
 | Per-resource 401-dance (an extra round-trip per URL, scales with resource count) | `ReactiveFetchManager` is reactive (bare → `401` → upgrade → retry, **per resource, no origin cache**). Proactively attach the token on the **first** request to an **allowed** origin via `installProactiveAuthFetch` (`@jeswr/solid-elements/auth`), keeping one bounded `401` re-upgrade — collapses N extra round-trips to one auth round-trip per storage root |
 | Proactive attach leaks a token to a foreign (or issuer) origin | The allow-set is the whole boundary (the token goes on before any `401`): **`https:`-only**, loopback-`http:` only under an explicit dev/test opt-in, **empty set ⇒ attach to nothing** (fail-closed), **resource origins only**. Derive it from the **pod-root/storage origin(s)** (+ the WebID-document origin only when the pod serves it) — **NOT the OIDC issuer origin** (a pod token has no audience there, and issuer HTTP must stay on the pinned `customFetch`) |
 | Patching fetch to attach tokens DEADLOCKS login | Internal OIDC HTTP (token endpoint, JWKS) re-enters the attach path. Pin `oauth4webapi`'s **`customFetch`** (and any internal OIDC fetch) to the **pristine/unpatched** fetch captured before `installProactiveAuthFetch`. Add an adversarial test that hangs/fails **without** the pin |
+| ANY proactive global-`fetch` patch lets the OIDC library's own calls recurse | The general rule behind the deadlock above: a wrapper that attaches auth to `globalThis.fetch` also intercepts the OIDC library's **own** discovery/JWKS/token/refresh fetches (→ recursion, or a DPoP proof bound to the issuer's `htu` not a resource). **Capture a PRISTINE `fetch` BEFORE patching** (module-load snapshot — the `MODULE_PRISTINE_FETCH` pattern) and route the library's internal HTTP through it: pin `oauth4webapi`'s **`customFetch`** (`unique symbol`, set as `[customFetch]` — see `@jeswr/auth-solid`/`@jeswr/solid-openid-client`), **or** keep the OIDC flow in a separate realm on the raw fetch (the [browser extension](https://github.com/jeswr/solid-browser-extension)'s SW: `discovery / token / refresh / profile fetches use the RAW fetch, never the authenticatedFetch path`). Invariant either way: the auth library's bootstrap HTTP must NOT run on your token-attaching wrapper |
 | Armed boundary + logged-out UI (fail-OPEN split) | A wiring fault throwing **after** the boundary armed + token pinned leaves the provider able to authenticate while the UI shows logged-out. On **every** failure path (login, autologin teardown, silent-restore wiring-fault `catch`) **FAIL-CLOSED**: `provider.reset()` **and** clear the boundary, not just return to login |
 | Resolved issuer/storage shape varies (sync string vs async URL) | The allow-set derivation reads the provider/profile for the **pod-root/storage** origins (NOT to add the issuer) and must handle both forms — a wrong `await`/`.then` throws, and a missing storage origin silently shrinks the allow-set back into the 401-dance |
 | Silent-restore as a module fn can't arm the boundary | Inline `SessionProvider`-callback restore arms the boundary inline; a **module-level** restore fn must have `armBoundary`/`clearBoundary` **closures threaded in** — otherwise restore is green but the boundary stays un-armed (reactive) |
