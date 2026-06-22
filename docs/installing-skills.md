@@ -60,16 +60,18 @@ stay in one place and every consumer (Claude Code, Codex, a CI lint) reads the s
 
 ## 3. Hash-pin a vendored copy (`skills-lock.json`)
 
-A vendored copy can drift from upstream silently. The suite pins each vendored skill by **content
-hash** in a `skills-lock.json` at the project root, so a stale or tampered skill is caught by a
-gate rather than shipped. The shape:
+A vendored copy can drift from upstream silently. The suite pins each vendored skill by a **content
+hash over the entire skill directory** — `SKILL.md` *and* every referenced file (`references/`,
+`scripts/`, `assets/`, …) — in a `skills-lock.json` at the project root, so a stale or tampered
+file *anywhere* in the skill is caught by a gate rather than shipped. (Hashing only `SKILL.md` would
+miss drift in the files it points at — those can be modified without the pin noticing.) The shape:
 
 ```json
 {
   "source": "github:jeswr/solid-ai-coding",
   "skills": {
-    "solid-fetch-rdf": { "sha256": "<hash of skills/solid-fetch-rdf/SKILL.md>" },
-    "solid-object":    { "sha256": "<hash of skills/solid-object/SKILL.md>" }
+    "solid-fetch-rdf": { "sha256": "<directory digest of skills/solid-fetch-rdf/ — ALL files>" },
+    "solid-object":    { "sha256": "<directory digest of skills/solid-object/ — ALL files>" }
   }
 }
 ```
@@ -78,15 +80,21 @@ Generate / verify the hashes with a one-liner and wire the verify into the proje
 drifted skill fails the build:
 
 ```sh
-# compute the pin for one skill
-shasum -a 256 .agents/skills/solid-fetch-rdf/SKILL.md
+# deterministic digest over EVERY file in a skill dir (each file's content + the sorted file set,
+# so an added, removed, or edited file under references/ scripts/ assets/ all change the digest)
+skill_digest() { ( cd "$1" && find . -type f -not -path './.git/*' | LC_ALL=C sort \
+  | xargs shasum -a 256 ) | shasum -a 256 | cut -d' ' -f1; }
 
-# verify all pinned skills match (fail-closed)
-shasum -a 256 -c <(node -e '
-  const lock = require("./skills-lock.json");
-  for (const [name, { sha256 }] of Object.entries(lock.skills))
-    console.log(`${sha256}  .agents/skills/${name}/SKILL.md`);
-')
+# compute the pin for one skill (covers SKILL.md + references/ + scripts/ + assets/ + …)
+skill_digest .agents/skills/solid-fetch-rdf
+
+# verify every pinned skill matches its directory digest (fail-closed — any drift exits non-zero)
+node -e 'for (const n of Object.keys(require("./skills-lock.json").skills)) console.log(n)' \
+| while read -r name; do
+    want=$(node -e "process.stdout.write(require('./skills-lock.json').skills['"'"'$name'"'"'].sha256)")
+    got=$(skill_digest ".agents/skills/$name")
+    [ "$want" = "$got" ] && echo "ok    $name" || { echo "DRIFT $name (want=$want got=$got)"; exit 1; }
+  done
 ```
 
 A hash-pinned skill is **not edited in place** — to update one, re-vendor from upstream and
