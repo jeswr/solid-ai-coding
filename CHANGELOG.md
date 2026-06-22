@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased] - 2026-06-22
+
+### Added
+
+- **`web-seo` skill** — SEO for a modern personal / portfolio / marketing site (Next.js / static /
+  SSR). Covers technical SEO (crawl→render→index, full-HTML for Googlebot, canonical/sitemap/robots,
+  the edge-middleware/content-negotiation crawl hazard), the Next.js App Router Metadata API,
+  schema.org **entity** SEO for a PERSON (connected `Person`/`WebSite`/`ProfilePage` JSON-LD, a stable
+  `@id`, `sameAs` to authoritative profiles incl. Wikidata as the strongest entity-resolution signal),
+  coexisting JSON-LD (SEO) with RDFa (a WebID/Linked-Data profile) on one aligned subject URI, E-E-A-T
+  content, Core Web Vitals (LCP/INP/CLS at field p75), and the off-page levers. Leads with the honesty
+  rule: on-page makes a site eligible + legible but does not buy rank — ranking #1 for a common
+  personal name is dominated by off-page authority + time and cannot be guaranteed by on-page work.
+
 ## [Unreleased] - 2026-06-21 (4)
 
 ### Added

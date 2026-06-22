@@ -159,6 +159,7 @@ Add a single skill with `--skill`, e.g. `npx skills add jeswr/solid-ai-coding --
 | [`solid-test-infrastructure`](./skills/solid-test-infrastructure/SKILL.md) | Verified test harness (Playwright + local CSS, account seeding, client-credentials fixtures) + the `dev.mjs` seeded dev environment |
 | [`solid-client-id`](./skills/solid-client-id/SKILL.md) | Static Client Identifier Documents — verified template, Next.js hosting recipe, provider wiring (e2e-tested against CSS) |
 | [`accessible-html-links`](./skills/accessible-html-links/SKILL.md) | Native `<a href>` + WCAG link-purpose rules (derived from Solid-website review feedback) |
+| [`web-seo`](./skills/web-seo/SKILL.md) | SEO for a modern personal / portfolio site — crawl/render, Next.js metadata + JSON-LD entity SEO (Person/ProfilePage), E-E-A-T, Core Web Vitals, off-page levers; honest about off-page/name-ranking limits |
 
 The guide's Part 2 also names a **default set of third-party engineering skills** (vitest,
 Playwright, Node, TypeScript, semantic HTML, web design review, code review, and more) with
