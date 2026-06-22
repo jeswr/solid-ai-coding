@@ -117,7 +117,7 @@ Cursor, Zed, Windsurf, Gemini CLI, GitHub Copilot coding agent, Devin, and a gro
 
 ## Solid skills
 
-This repo bundles twelve [Agent Skills](https://agentskills.io/) under [`skills/`](./skills/)
+This repo bundles thirteen [Agent Skills](https://agentskills.io/) under [`skills/`](./skills/)
 that go deeper than the guide.
 
 ### Install into any project
@@ -142,6 +142,11 @@ Add a single skill with `--skill`, e.g. `npx skills add jeswr/solid-ai-coding --
 
 > The skill bundle complements — it does not replace — the [`AGENTS.md`](./AGENTS.md) guide.
 > Install the guide first ([above](#use-it-in-your-project)), then add the skills.
+
+For the other two install paths — **vendoring** the skills into a project's `.agents/skills/` for a
+reviewable committed copy, **hash-pinning** them with `skills-lock.json`, and how skills get
+**advertised** to the agent (the progressive-disclosure index) — see
+[`docs/installing-skills.md`](./docs/installing-skills.md).
 
 ### The bundle
 

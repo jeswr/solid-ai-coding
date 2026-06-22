@@ -4,6 +4,16 @@
 
 ### Added
 
+- **`docs/installing-skills.md`** — a "skills install / advertise" page (adapting
+  [LikeC4's AI-tools pattern](https://likec4.dev/tooling/ai-tools/) as prior art) covering the
+  three install paths: the `npx skills add jeswr/solid-ai-coding` discovery protocol, **vendoring**
+  the skills into a project's `.agents/skills/` for a reviewable committed copy, and **hash-pinning**
+  a vendored copy with `skills-lock.json` (fail-closed verify in the lint gate; the suite convention
+  `prod-solid-server` already uses). Documents how skills are **advertised** to the agent — the
+  `SKILL.md` frontmatter `description` is the progressive-disclosure index surfaced in the system
+  prompt, so every description is written as an explicit "Use when …" trigger. README's `Solid
+  skills` section now links to it; the bundle count is corrected to thirteen.
+
 - **`web-seo` skill** — SEO for a modern personal / portfolio / marketing site (Next.js / static /
   SSR). Covers technical SEO (crawl→render→index, full-HTML for Googlebot, canonical/sitemap/robots,
   the edge-middleware/content-negotiation crawl hazard), the Next.js App Router Metadata API,
