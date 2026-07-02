@@ -175,6 +175,73 @@ Fix:
 (Learned fixing the `jeswr/solid-browser-extension` e2e CI — the ESM-config fix. This is the
 ESM-default mirror of the CJS-default `globalSetup` transpiler gotcha below.)
 
+## Node version — 25.1 breaks SSR/prerender via `localStorage`
+
+Node 25.1 ships `globalThis.localStorage` as a **truthy object whose methods are
+non-functional** unless `--localstorage-file` is set. That silently breaks the standard
+browser-detection guard used to keep Solid client code (and any `localStorage`-touching code)
+out of the server render path:
+
+```ts
+// Passes on Node 25.1 even though localStorage.getItem() then throws —
+// the object exists, so `typeof` sees "object", not "undefined".
+if (typeof localStorage !== "undefined") {
+  const cached = localStorage.getItem(key); // throws server-side
+}
+```
+
+Under Next.js (or any SSR/prerender framework) this makes a page that only touches
+`localStorage` behind a `typeof` guard 500 at build/prerender time — on Node ≤24 the same guard
+correctly evaluates `false` server-side and skips the branch. This bit the `jeswr/elk` fork's `/`
+prerender.
+
+Fix, in order of preference:
+- **Build/prerender on Node ≤24** — pin it (`.nvmrc` / `package.json` `engines.node`) so CI and
+  every contributor's local build use a version where the guard behaves.
+- **Feature-detect by calling, not by `typeof`** — wrap the actual access in try/catch instead of
+  trusting existence:
+  ```ts
+  function hasWorkingLocalStorage(): boolean {
+    try {
+      localStorage.setItem("__probe__", "1");
+      localStorage.removeItem("__probe__");
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  ```
+- Do both — the `.nvmrc`/`engines` pin keeps the whole toolchain (not just this one guard)
+  behaving consistently; the call-based probe is the defensive fallback for code you don't
+  control.
+
+(Learned in the `jeswr/elk` fork upstream-sync, 2026-07-02 — verified by reproduction: the
+`typeof` guard passed and `/` prerendered fine on Node 24, then 500'd on Node 25.1 with the exact
+same source.)
+
+## Clearing a Dependabot backlog in a fork — range-scoped pnpm overrides
+
+When syncing an OSS app fork with its upstream, **merging upstream does not clear your
+Dependabot alerts** — upstream usually carries the same vulnerable transitive dependencies, so
+the alerts survive the merge unchanged. To clear a backlog without waiting on upstream:
+
+- Use `pnpm-workspace.yaml` `overrides` in **range-selector form**, scoped to only the vulnerable
+  major (e.g. `"vulnerable-pkg@^3": "^3.2.1"`), not a blanket pin — a blanket override can drag in
+  an incompatible major and silently break every parallel-major dependent left untouched by the
+  advisory.
+- **Verify the patched version actually exists on npm before writing the override** — an override
+  pointing at a version that was never published leaves `pnpm install` unresolvable.
+- **Regenerate and re-verify the lockfile per alert** — check each Dependabot alert against the
+  regenerated lockfile individually rather than assuming one override run clears all of them.
+- **pnpm ≥11 footgun**: a git-hosted dependency with install/build scripts must be allowlisted by
+  its **exact tarball URL** in `pnpm.allowedDeprecatedVersions`/`onlyBuiltDependencies`-style
+  config. If that dependency is pinned to a moving ref (e.g. `#main`), the allowlist entry breaks
+  every time the upstream ref advances — pin the git dependency by commit SHA, not a branch name,
+  so the allowlist entry stays valid.
+
+(Learned in the `jeswr/elk` fork upstream-sync, 2026-07-02 — each fix verified per-alert against
+the regenerated lockfile.)
+
 ## Gotchas
 
 | Gotcha | Detail |
@@ -186,3 +253,5 @@ ESM-default mirror of the CJS-default `globalSetup` transpiler gotcha below.)
 | Bare fresh profiles | Without the profile seed, `Agent.name` is `undefined` and `storageUrls` is empty — apps appear broken when it's just an unseeded pod |
 | ETag from CSS | Present and stable — exercise the conditional-PUT (`If-Match`/`412`) path in tests; legacy NSS lacks it (see `solid-server-matrix`) |
 | PGlite boot cost | `new PGlite()` per test is ~1 s × N tests; boot once per vitest worker + reset schema between tests instead (see section above) |
+| Node 25.1 `localStorage` | `globalThis.localStorage` exists but throws on call unless `--localstorage-file` is set — a `typeof localStorage !== "undefined"` guard passes and then fails at call time, breaking SSR/prerender. Build on Node ≤24 or feature-detect by calling (see section above) |
+| Dependabot survives an upstream merge | Merging a fork's upstream does NOT clear Dependabot alerts (upstream ships the same vulnerable transitives) — clear them with range-scoped `pnpm-workspace.yaml` overrides, verified per alert (see section above) |

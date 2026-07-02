@@ -1,5 +1,26 @@
 # Changelog
 
+## [Unreleased] - 2026-07-02
+
+### Added
+
+Two portable lessons upstreamed from the `jeswr/elk` fork's upstream-sync (2026-07-02), folded
+into `solid-test-infrastructure` (the repo's toolchain/build-gotchas home):
+
+- **Node 25.1 breaks SSR/prerender via `localStorage`** — Node 25.1 ships
+  `globalThis.localStorage` as a truthy object whose methods throw unless
+  `--localstorage-file` is set, so the common `typeof localStorage !== "undefined"`
+  browser-detection guard passes server-side and then fails at call time (verified by
+  reproduction: elk's `/` prerender 500'd on 25.1, fine on Node 24 with identical source). Build
+  on Node ≤24, or feature-detect by calling (try/catch a probe) instead of `typeof`; pin with
+  `.nvmrc`/`engines`.
+- **Clearing a Dependabot backlog in a fork via range-scoped pnpm overrides** — merging upstream
+  does not clear alerts (upstream carries the same vulnerable transitives); use
+  `pnpm-workspace.yaml` overrides scoped to the vulnerable major only, verify each patched
+  version exists on npm first, verify per-alert against the regenerated lockfile, and pin any
+  git-hosted dependency with build scripts by commit SHA — the pnpm ≥11 tarball-URL allowlist
+  breaks every time a `#main`-style ref advances.
+
 ## [Unreleased] - 2026-06-22
 
 ### Added
