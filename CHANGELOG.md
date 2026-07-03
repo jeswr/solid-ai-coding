@@ -1,5 +1,20 @@
 # Changelog
 
+## [Unreleased] - 2026-07-03
+
+### Added
+
+- **`solid-reactive-authentication` gotcha: pinning only the WebID `profileFetch` doesn't fully
+  close the `customFetch` re-entrancy hole** — when a proactive-fetch boundary's credential
+  origin set also covers the issuer, `discoveryRequest`, dynamic client registration, and the
+  authorization-code token grant are each separate `oauth4webapi` calls that independently
+  re-enter the patched global fetch if not pinned. The observable symptom is a login that hangs
+  silently right after the WebID profile read and before any `/authorize` hop or popup, with no
+  thrown error — distinct from the token-endpoint-leg deadlock already documented. Fix: thread
+  one `oauthFetch` reference through a single shared `httpOptions`-style chokepoint used by every
+  `oauth4webapi` call in the login flow, rather than pinning call-sites piecemeal. Learned fixing
+  a real interactive-login stall in a suite app, 2026-07.
+
 ## [Unreleased] - 2026-07-02
 
 ### Added
