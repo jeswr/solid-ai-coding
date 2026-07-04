@@ -16,6 +16,29 @@
  * `allowInsecureLoopback` is what makes LOCAL CSS work: it flips oauth4webapi's
  * `allowInsecureRequests` ONLY for `localhost`/`127.0.0.1` issuers, so the HTTP
  * issuer of a dev CSS is accepted while remote HTTPS issuers stay strict.
+ *
+ * PRISTINE-FETCH PINNING (2026-07): every `oauth4webapi` call this provider
+ * makes — `discoveryRequest`, dynamic client registration, and the
+ * authorization-code token grant — is pinned to `[oauth.customFetch]` via the
+ * single `#httpOptions()` chokepoint, defaulting to the SAME construction-time
+ * `globalThis.fetch` snapshot used for the WebID profile read. This closes a
+ * real deadlock class: an app that patches the global `fetch` with a
+ * credential boundary covering the issuer's origin (a proactive authed-fetch
+ * wrapper) makes this provider's own OIDC traffic re-enter the patch, which
+ * single-flights onto the very `#authenticate()` promise that issued the
+ * request — a circular await that stalls login silently, right after the
+ * WebID profile read and before any `/authorize` hop or popup, with no thrown
+ * error. See the `solid-reactive-authentication` skill's "Login hangs
+ * silently AFTER the WebID profile read" gotcha row for the full write-up and
+ * a deterministic repro recipe. Pin ALL oauth4webapi call sites through ONE
+ * chokepoint (`#httpOptions`), never per-call — a per-call pin is exactly how
+ * this bug hides (one call pinned, a sibling call added later is not).
+ *
+ * ILLUSTRATIVE ONLY — this file is reference/reading material for the
+ * internals, not a library to depend on. Apps should import a shared,
+ * maintained provider (`@jeswr/solid-auth-core`'s `WebIdDPoPTokenProvider` /
+ * `createSolidAuth`, in extraction as of 2026-07) rather than copying this
+ * file — see the "token provider is a shared library" gotcha below.
  */
 import * as oauth from "oauth4webapi";
 import * as DPoP from "dpop";
@@ -85,6 +108,17 @@ export interface WebIdDPoPTokenProviderOptions {
    * patches the global) — see the recursion note in the class docs. Test-only.
    */
   profileFetch?: typeof fetch;
+  /**
+   * Override the fetch pinned to EVERY `oauth4webapi` call this provider makes
+   * (`discoveryRequest`, dynamic client registration, the authorization-code
+   * token grant) via `[oauth.customFetch]`. Defaults to the SAME
+   * construction-time `globalThis.fetch` snapshot as {@link profileFetch} — NOT
+   * to whatever `globalThis.fetch` is at call time, which may by then be a
+   * patched wrapper whose credential boundary covers the issuer's origin. Do
+   * not leave this unset if the app patches the global: an unpinned OIDC call
+   * re-enters the patch and deadlocks login (see the class docs). Test-only.
+   */
+  oauthFetch?: typeof fetch;
 }
 
 /** A WebID advertises several issuers but no `chooseIssuer` was supplied. */
@@ -139,6 +173,15 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    */
   readonly #profileFetch: typeof fetch;
   /**
+   * The fetch pinned to every `oauth4webapi` call (discovery, dynamic client
+   * registration, the token grant) via the `#httpOptions()` chokepoint below.
+   * Defaults to the SAME construction-time snapshot as `#profileFetch` — one
+   * pristine reference backs both, captured before any app-level proactive
+   * fetch patch could have run. This is the fix for the discovery-stage
+   * circular-await deadlock documented in the class docs above.
+   */
+  readonly #oauthFetch: typeof fetch;
+  /**
    * Memoised issuer resolution: the user is asked for their WebID ONCE per
    * provider instance, not on every 401 — and concurrent 401s share the same
    * in-flight prompt (single-flight). Cleared on failure so a cancelled or
@@ -167,19 +210,40 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     this.#clientId = options.clientId;
     this.#chooseIssuer = options.chooseIssuer;
     this.#allowInsecureLoopback = options.allowInsecureLoopback ?? false;
-    this.#profileFetch =
-      options.profileFetch ?? globalThis.fetch.bind(globalThis);
+    // ONE pristine snapshot backs both defaults — captured here, at
+    // construction time, before any app-level proactive-fetch patch (which
+    // typically installs later, e.g. in a `useEffect`) can have run.
+    const pristineFetch = globalThis.fetch.bind(globalThis);
+    this.#profileFetch = options.profileFetch ?? pristineFetch;
+    this.#oauthFetch = options.oauthFetch ?? pristineFetch;
   }
 
-  /** oauth4webapi request options, enabling insecure loopback per the policy. */
+  /**
+   * oauth4webapi request options — the SINGLE chokepoint every oauth4webapi
+   * call in this provider goes through (`discoveryRequest`,
+   * `dynamicClientRegistrationRequest`, `authorizationCodeGrantRequest`).
+   * Enables insecure loopback per the policy, and unconditionally pins
+   * `[oauth.customFetch]` to `#oauthFetch` — never per-call-site, which is
+   * exactly how the re-entrancy deadlock hides (one call pinned, a sibling
+   * call added later silently isn't). See the class docs' PRISTINE-FETCH
+   * PINNING note.
+   */
   #httpOptions(
     issuer: URL,
     signal: AbortSignal,
-  ): { signal: AbortSignal; [oauth.allowInsecureRequests]?: true } {
+  ): {
+    signal: AbortSignal;
+    [oauth.customFetch]: typeof fetch;
+    [oauth.allowInsecureRequests]?: true;
+  } {
     if (this.#allowInsecureLoopback && isLoopback(issuer.hostname)) {
-      return { signal, [oauth.allowInsecureRequests]: true };
+      return {
+        signal,
+        [oauth.customFetch]: this.#oauthFetch,
+        [oauth.allowInsecureRequests]: true,
+      };
     }
-    return { signal };
+    return { signal, [oauth.customFetch]: this.#oauthFetch };
   }
 
   /**
@@ -379,7 +443,11 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    */
   async #resolveClient(
     authorizationServer: oauth.AuthorizationServer,
-    http: { signal: AbortSignal; [oauth.allowInsecureRequests]?: true },
+    http: {
+      signal: AbortSignal;
+      [oauth.customFetch]: typeof fetch;
+      [oauth.allowInsecureRequests]?: true;
+    },
   ): Promise<oauth.Client> {
     if (this.#clientId !== undefined) {
       // A public browser client identified by a dereferenceable URL. `oauth.Client`

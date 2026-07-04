@@ -85,6 +85,26 @@ const { dataset, etag } = await fetchRdf(resourceUrl);
 - **No wrapping.** Feed `dataset` to `@solid/object` / your `TermWrapper` subclasses
   (`new WebIdDataset(dataset, DataFactory)`) — see the `solid-object` skill.
 
+### Writing to a pod location safely — the scope guard comes from a library, not a re-derivation
+
+_(Any library/app that writes to a **user-configured** pod location — a base URL / container the
+user pointed the app at, not a URL the app itself hard-codes.)_
+
+A write path built on the dataset above (mutate → `n3.Writer` → conditional `PUT`/`PATCH`) needs
+one more guard before the request goes out: confirm the target URL is actually **inside** the
+configured base, not merely that it *looks* plausible — the same-origin-**and**-path-prefix
+containment check `isUnderStorage` above performs for reads, applied to a write target instead.
+That guard (`http(s):`-only, same-origin + path-prefix on segment boundaries, refuse
+scheme-relative `//host/…` and embedded-credential `user:pass@host` URLs, fail-closed on an
+unparseable URL) was independently re-derived — and separately roborev-hardened for the **same**
+bypasses — in roughly **eight** different `@jeswr` libraries (an RxDB replication driver, a Yjs
+provider, an n8n node, an MCP server, and several app-side write helpers each shipping their own
+`assertWithinBase`). Don't add a ninth hand-rolled copy: use
+**[`@jeswr/guarded-fetch`](https://github.com/jeswr/guarded-fetch)'s `podScope(base)`** instead —
+it centralises exactly this check (plus the URL-hygiene cases most first-pass hand-rolled copies
+missed). Reserve a bespoke re-derivation for a genuine gap in guarded-fetch's coverage; check
+there first, and contribute the gap back rather than forking a local copy.
+
 ## Gotchas
 
 | Gotcha | Detail |
@@ -96,6 +116,8 @@ const { dataset, etag } = await fetchRdf(resourceUrl);
 | AS2 `application/activity+json` is rejected by `parseRdf`, and `parseRdf` alone is not safe for AS2 server-side | ActivityStreams 2.0 senders use `application/activity+json`, not in `SUPPORTED_RDF_MEDIA_TYPES`. The bytes are JSON-LD-compatible, but AS2 embeds a remote `@context` URL — using `parseRdf` after a content-type normalisation risks a live outbound context fetch (SSRF). Use the underlying `jsonld` layer with a guarded `documentLoader` instead. See the "Receiver-side" section below. (Receiver/server-side; learned building the LDN suggest-inbox in jeswr/solid-webid-index.) |
 | A foreign pod's claim about *you* is **untrusted** | `fetchRdf` returns whatever the bytes say. A resource in someone else's pod asserting "this task is assigned to *you*" / "*you* are a member" is an unverified claim — anyone can write that triple. Before acting on cross-pod data, verify provenance: authorised source **and** the data resides in that source's own `pim:storage`. See "Receiver-side: trusting cross-pod claims" below. (Learned building the Pod Manager assigned-to-me view, jeswr/solid-pod-manager.) |
 | A search-index's links (`hydra:next`, `foaf:img`) are attacker-controlled | An external Hydra/TPF index returns index-controlled URLs. Follow `hydra:next` verbatim but **same-origin-only**; fetch through a **pristine fetch + `credentials:"omit"`** (the `registerGlobally()`-patched global retries a `401` with a token — `omit` covers cookies but NOT that DPoP retry); reject non-`https:` image IRIs before an `<img src>`; for existence use a non-redirecting JSON mode and fail closed on 3xx/error. See "Consuming an external Hydra / TPF search index safely" below. (Learned building the solid-webid-index consumer client, 2026-06.) |
+| A bespoke `safeFetch`/SSRF guard was hand-rolled (again) | Seven-plus independent copies were found across the suite, each re-deriving private-IP classification, origin checks, and redirect handling. Use **[`@jeswr/guarded-fetch`](https://github.com/jeswr/guarded-fetch)** instead of writing another one — it also refuses to silently follow a redirect (`redirect: "manual"`), which a from-scratch guard easily misses even when its origin/scheme checks are otherwise correct |
+| A pod-scope write guard (`assertWithinBase`) was hand-rolled (again) | Roughly eight independent copies were found (RxDB/Yjs/n8n/MCP-server/app write-helper libraries), each separately roborev-hardened for the same bypasses (scheme-relative, embedded-credentials, unparseable-URL). Use **`@jeswr/guarded-fetch`'s `podScope(base)`** rather than re-deriving the containment check — see "Writing to a pod location safely" above |
 
 ## Receiver-side: parsing AS2 LDN notifications safely
 
@@ -297,5 +319,20 @@ attacker-influenced (learned building the solid-webid-index consumer client, 202
 
 Keep the URL/scheme checks in a **pure predicate** (same testability discipline as the cross-pod
 provenance predicate above) so they're unit-testable without a live index.
+
+**Consolidate on a shared guard — don't hand-roll another `safeFetch`.** The origin-refusal,
+`credentials:"omit"` + pristine-fetch pairing, and scheme checks above are exactly the kind of
+guard that quietly drifts when re-implemented per project: the suite found **seven-plus** bespoke
+SSRF helpers (a community-feeds client, a notification sender, an agent-target resolver, a
+SHACL-form fetch, an OSS-fork's own `ssrf.ts`, a hardened-fetcher class…) each independently
+re-deriving private-IP classification, origin checks, and redirect handling — with the *same*
+classes of bypass showing up in more than one. A credentialed or trust-bearing fetch must also
+**refuse to silently follow a redirect** (`redirect: "manual"`, then reject/re-validate the
+target) — the redirect target bypasses every scheme/origin check already run against the
+*original* URL, so following it bakes the SSRF hole back in even when the pre-redirect checks
+above are done correctly. **[`@jeswr/guarded-fetch`](https://github.com/jeswr/guarded-fetch)**
+consolidates IP-classification + DNS-pinning + redirect refusal into one policy — new code should
+never write its own private-IP classifier or redirect-following guard; reach for guarded-fetch
+first, and extend it (rather than forking a local copy) if it's missing something.
 
 (Learned building the solid-webid-index consumer client, 2026-06.)
