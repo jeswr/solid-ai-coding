@@ -557,6 +557,39 @@ regress.
 > reads. Whether you pin `customFetch` or segregate by realm, the invariant is identical: **the auth
 > library's own bootstrap HTTP must run on a fetch that is NOT your token-attaching wrapper.*)
 
+#### Deterministic repro: the discovery-stage circular-await deadlock
+
+The general recursion rule above has a sharper, easy-to-miss special case: pinning `customFetch`
+for *some* oauth4webapi calls but not others still deadlocks — and it deadlocks **silently, with
+no thrown error**, which makes it easy to ship. Reproduce it on demand rather than waiting to spot
+it live (same discipline as the 401-budget test below — drive the REAL login path over a mock OP,
+never a fetch-mock that hides the re-entrancy):
+
+1. Stand up a minimal mock OP (a discovery document + `/authorize` + `/token` endpoints — any
+   static/mock HTTP server suffices, no real Solid pod needed) and a token provider pointed at it.
+2. Install a proactive-fetch-style wrapper on `globalThis.fetch` whose credential-boundary
+   allow-set includes the mock OP's **origin** — this is the load-bearing precondition; without it
+   the discovery request has nothing to re-enter.
+3. Pin only the WebID **`profileFetch`** (leave `oauthFetch`/`customFetch` unpinned, i.e. the bug
+   state) and drive an interactive login end-to-end.
+4. **Expected failure (unpinned):** the login promise never settles — no `/authorize` popup ever
+   opens, and nothing throws or rejects. `discoveryRequest` re-enters the patched fetch, which
+   calls `provider.upgrade()`, which finds the in-flight `#authenticate()` promise for this issuer
+   and single-flights onto it — the very promise that is still awaiting the `discoveryRequest` it
+   just issued. Wrap the login call in a bounded timeout (e.g. 2s) so "hangs forever" becomes a
+   deterministic, assertable test failure rather than a suite that never completes.
+5. **Expected pass (pinned):** thread ONE `oauthFetch` reference (defaulting to the same
+   construction-time pristine snapshot as `profileFetch`) through a single shared
+   `#httpOptions()`-style chokepoint used by *every* oauth4webapi call — `discoveryRequest`,
+   dynamic client registration, and the authorization-code token grant alike — as
+   `[oauth.customFetch]`. The login promise now resolves (or rejects on a genuine auth error) well
+   inside the timeout.
+
+Keep the negative case (step 4) in the regression suite alongside the positive one: a test that
+only ever exercises the already-pinned path can't catch a future oauth4webapi call site added
+without the pin. (Root-caused fixing a real interactive-login stall in a suite app, 2026-07 — bead
+`suite-tracker-8575`.)
+
 **The armed-then-fail FAIL-OPEN gap — a real roborev-HIGH.** A wiring fault can throw **after** the
 boundary has been armed AND the token pinned, but **before** the UI commits to logged-in. That
 leaves the *provider able to authenticate* (boundary armed, token live) while the *UI falls back to
@@ -644,12 +677,53 @@ before the call if `ui.getCode` is still not a function (`whenDefined` resolves 
 registered). **Never access `.getCode` at mount** — only at call time. (Cited:
 [`jeswr/pod-docs@6e589ca`](https://github.com/jeswr/pod-docs/commit/6e589ca).)
 
+## The login stack is a shared library, not a per-app fork
+
+Two consolidation lessons that generalize past any single bug fix — learned auditing the login
+code across the `@jeswr` Solid app suite (cross-repo duplication review, 2026-07):
+
+### The WebID/DPoP token provider belongs in a LIBRARY, not copied per app
+
+`webid-token-provider.ts` (the reference implementation this skill bundles, below) was found
+hand-forked as an **app-local source file in 21 separate places** across the suite, sizes ranging
+**547–2,308 lines**, with almost every copy's hash different from every other — these are forks,
+not copies. That divergence is not cosmetic: it is exactly why the pristine-`oauthFetch`-pinning
+fix documented above was independently *missing* (or independently rediscovered and re-fixed) in
+more than half of them — a fix applied to one fork does not reach the other twenty. **Treat the
+copy bundled with this skill as reading material for the internals, not a template to fork into
+`src/lib/`.** The durable home for this logic is a shared package —
+[`@jeswr/solid-auth-core`](https://github.com/jeswr/solid-auth-core) (in extraction from the
+`@jeswr/solid-elements` auth controller as of 2026-07), whose `WebIdDPoPTokenProvider` /
+`createSolidAuth()` factory bakes the pristine-fetch pin in as non-optional, unconditional wiring
+— import it rather than copying this file. Until it ships, at minimum port the `oauthFetch`
+pinning fix above into any existing fork before shipping it.
+
+### Login consistency via a shared component
+
+The same fork-and-diverge pattern hit the React glue wrapping the provider: `SessionProvider.tsx`
+/ `auth-context.tsx` copies across a dozen-plus apps were found differing by **over 1,200 lines**
+between the two most divergent siblings, each independently (and inconsistently) re-deriving the
+restoring/authenticated/login-state machine, StrictMode double-mount safety, and teardown ordering
+this skill documents throughout. **Do not hand-roll a login page or session-glue module.** Mount a
+shared component instead:
+
+- **`jeswr-login-panel`** ([`@jeswr/solid-elements`](https://github.com/jeswr/solid-elements)) — a
+  web component for a non-React or mixed stack.
+- **`SessionProvider` / `useSolidSession()`** (`@jeswr/solid-auth-core/react`, in extraction) — for
+  a React/Next.js app.
+
+Both are built to already enforce the suite invariants documented in this skill — silent session
+restore on load, fail-closed restore, credential-free public fetch for profile reads, WebID-scoped
+IndexedDB persistence cleared on logout — so an app consuming one gets those invariants for free
+instead of re-deriving (and re-getting subtly wrong) its own version of each.
+
 ## Letting users pick their Solid server — behaviour spec + tested code
 
 How should login *feel*? The reference behaviour comes from the Solid browser extension
 ([theodi/solid-browser-extension](https://github.com/theodi/solid-browser-extension)), which
 implements the same reactive model. Two layers of **tested reference code** are bundled with
-this skill:
+this skill **as reading material for the internals** — per the lesson just above, a production app
+should import a shared provider/component rather than copying these files:
 
 1. **[`webid-token-provider.ts`](./webid-token-provider.ts)** — `WebIdDPoPTokenProvider`, a
    complete custom `TokenProvider` (a port of the published `DPoPTokenProvider` flow) whose
@@ -678,7 +752,10 @@ this skill:
    `RecentAccounts` (most-recent-first, deduplicated, corruption-safe, remembers the chosen
    issuer and storage per account).
 
-Copy both into `src/lib/` and build your UI on them. The behaviour to implement:
+Prefer `@jeswr/solid-auth-core` / `jeswr-login-panel` (see "The login stack is a shared library"
+above) once available; where no shared package exists yet for your stack, copy both into
+`src/lib/` and build your UI on them — but track that copy against the shared package so it isn't
+a permanent fork. The behaviour to implement:
 
 1. **WebID-first entry.** The login surface asks for one thing: the user's **WebID** (a URL
    input). No identity-provider dropdown, no server list — users know their WebID, not their
@@ -771,6 +848,8 @@ from the persisted session.)
 | Deep-link autologin logs in as the WRONG WebID | A live IdP cookie session for another account satisfies `prompt=none` — **enforce** that the ID-token WebID `webIdsEqual` the requested one and **throw before writing any session/issuer state** on mismatch; validate `state` on the error/abort return too |
 | Silent restore breaks with `"key is not extractable"` | The DPoP **public** key must be `extractable: true` (oauth4webapi serialises it into the proof JWK, RFC 9449 §4.2) while the **private** key stays non-extractable. `generateKey(…, false, …)` gets this right; the full-page-redirect export/re-import must re-import private `false` / public `true` (NOT both `true`). Test: public exports to JWK, private `exportKey` rejects |
 | Hand-rolled per-app session restore | Use the shared, audited **[`@jeswr/solid-session-restore`](https://github.com/jeswr/solid-session-restore)** (WebID-scoped IndexedDB store + pure `decideSilentRestore` + DPoP-bound `restoreSession`) — apps do thin wiring (confirm-then-persist, ordered awaited logout, `shouldDropRememberedPointer` reconciliation), never their own crypto/persistence |
+| A token-provider fix landed in one app but not its siblings | `webid-token-provider.ts` is hand-forked per app (21 divergent copies found, 547–2,308 lines) — a fix (e.g. the `oauthFetch` pin above) applied to one copy never reaches the others. Import a shared provider (`@jeswr/solid-auth-core`, in extraction) instead of forking this skill's reference file into `src/lib/` |
+| Every app's login page / session glue looks and behaves slightly differently | `SessionProvider.tsx` copies were found diverging by **1,200+ lines** between siblings, each re-deriving the restore/auth/login state machine independently. Mount `jeswr-login-panel` (`@jeswr/solid-elements`) or `SessionProvider`/`useSolidSession()` (`@jeswr/solid-auth-core/react`) rather than hand-rolling one per app |
 | Restore succeeds but the first pod read still 401s | Restore must yield an **authenticated** fetch, not just a WebID — arm the singleton manager's provider with the restored session (and/or the proactive boundary) so the global patch attaches the token; mounting on a bare/unpatched fetch leaves pod requests unauthenticated. Make it **refresh-capable**: on a 401/expiry re-mint via the refresh credential through the **default/pristine** fetch (never the expired restored one) and retry **once** |
 | Per-resource 401-dance (an extra round-trip per URL, scales with resource count) | `ReactiveFetchManager` is reactive (bare → `401` → upgrade → retry, **per resource, no origin cache**). Proactively attach the token on the **first** request to an **allowed** origin via `installProactiveAuthFetch` (`@jeswr/solid-elements/auth`), keeping one bounded `401` re-upgrade — collapses N extra round-trips to one auth round-trip per storage root |
 | Proactive attach leaks a token to a foreign (or issuer) origin | The allow-set is the whole boundary (the token goes on before any `401`): **`https:`-only**, loopback-`http:` only under an explicit dev/test opt-in, **empty set ⇒ attach to nothing** (fail-closed), **resource origins only**. Derive it from the **pod-root/storage origin(s)** (+ the WebID-document origin only when the pod serves it) — **NOT the OIDC issuer origin** (a pod token has no audience there, and issuer HTTP must stay on the pinned `customFetch`) |

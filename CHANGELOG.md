@@ -1,5 +1,40 @@
 # Changelog
 
+## [Unreleased] - 2026-07-04
+
+### Added
+
+Five lessons from the cross-repo "shared-logic upstreaming" duplication review
+(`prod-solid-server/docs/design/shared-logic-upstreaming-review.md` §5), plus an interim fix to
+this repo's own bundled reference code that the review's propagation-vector finding flagged:
+
+- **`solid-reactive-authentication` — deterministic repro recipe for the discovery-stage
+  circular-await deadlock.** The 2026-07-03 entry above documented the "pin ALL oauth4webapi
+  calls" fix; this adds a step-by-step reproduction (mock OP + a proactive-fetch wrapper whose
+  allow-set covers the issuer origin + a bounded-timeout login call) so the bug is reproducible on
+  demand instead of only spottable live, with the negative (unpinned → hangs) and positive
+  (pinned → resolves) cases both kept in the regression suite.
+- **`solid-reactive-authentication` — "the token provider belongs in a library, not a per-app
+  copy."** `webid-token-provider.ts` was found hand-forked in 21 separate app locations
+  (547–2,308 lines, almost every hash different) — which is exactly why the pristine-fetch pin
+  was independently missing or independently re-fixed in more than half of them. The skill now
+  frames its bundled copy as reading material for the internals, points at the in-extraction
+  `@jeswr/solid-auth-core` as the durable home, and the bundled `webid-token-provider.ts` itself
+  is patched with the `oauthFetch` pin (it previously only pinned `profileFetch`) so this skill
+  stops teaching the unpinned pattern in the interim.
+- **`solid-reactive-authentication` — "login consistency via a shared component."** 14 divergent
+  `SessionProvider`/`auth-context` copies (>1,200 lines apart at the extremes) each re-derived the
+  restore/auth/login state machine independently. Mount `jeswr-login-panel`
+  (`@jeswr/solid-elements`) or `SessionProvider`/`useSolidSession()`
+  (`@jeswr/solid-auth-core/react`, in extraction) instead of hand-rolling one per app.
+- **`solid-fetch-rdf` — "pod-scope write guards come from `@jeswr/guarded-fetch`'s `podScope`."**
+  ~8 independent `assertWithinBase` copies (RxDB/Yjs/n8n/MCP-server/app write-helper libraries)
+  were each separately roborev-hardened for the same same-origin/path-prefix/scheme bypasses.
+- **`solid-fetch-rdf` — extended the Hydra/TPF "attacker-controlled links" SSRF lesson** with a
+  pointer to consolidating the suite's seven-plus bespoke `safeFetch`/SSRF helpers onto
+  `@jeswr/guarded-fetch` (redirect refusal included — a from-scratch guard easily gets the
+  pre-redirect checks right and still follows a redirect around them).
+
 ## [Unreleased] - 2026-07-03
 
 ### Added
