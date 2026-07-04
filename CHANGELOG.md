@@ -4,6 +4,18 @@
 
 ### Added
 
+- **`solid-fetch-rdf` — `n3.Writer` does not escape IRIs or strip control chars when
+  serialising untrusted RDF.** A term value from untrusted input (a parsed foreign `@id`, a
+  JSON/HTTP field, a user URL) is emitted verbatim between `<…>`; an embedded `IRIREF`-forbidden
+  char (`>`/space/control/…) breaks out and can inject forged triples (one intended quad → two,
+  the second attacker-chosen). A `new URL()`/`isHttpIri` boolean check is insufficient — it
+  validates but forwards the raw value. Filter IRIs through `safeHttpIri`/`escapeIri` from
+  `@jeswr/rdf-serialize` (the consolidated home for the pattern ~20 suite libs re-derived over
+  ~40 adversarial rounds), and strip raw `ESC`/`DEL`/C1 controls from untrusted literal bodies.
+  Cited: verified repro filed upstream as [rdfjs/N3.js#659](https://github.com/rdfjs/N3.js/issues/659).
+  (Learned consolidating the suite-wide `safeHttpIri` copies into `@jeswr/rdf-serialize`,
+  bead suite-tracker-olt0.)
+
 Five lessons from the cross-repo "shared-logic upstreaming" duplication review
 (`prod-solid-server/docs/design/shared-logic-upstreaming-review.md` §5), plus an interim fix to
 this repo's own bundled reference code that the review's propagation-vector finding flagged:
