@@ -22,6 +22,12 @@ this repo's own bundled reference code that the review's propagation-vector find
   `@jeswr/solid-auth-core` as the durable home, and the bundled `webid-token-provider.ts` itself
   is patched with the `oauthFetch` pin (it previously only pinned `profileFetch`) so this skill
   stops teaching the unpinned pattern in the interim.
+- **`solid-reactive-authentication` — named the exact source of the circular-await lesson.** The
+  discovery-stage deadlock gotcha and its repro recipe previously cited "a suite app, 2026-07"
+  without naming it; now cites the concrete origin — the **AccessRadar** app (`jeswr/product`,
+  branch `fix/login-stall-8575`, commit `7a5461a`, bead `suite-tracker-8575`) — in both the SKILL.md
+  gotcha rows and the bundled `webid-token-provider.ts` docstring, so a future reader can trace the
+  lesson back to the exact fix and its `login-stall.test.ts` deterministic repro.
 - **`solid-reactive-authentication` — "login consistency via a shared component."** 14 divergent
   `SessionProvider`/`auth-context` copies (>1,200 lines apart at the extremes) each re-derived the
   restore/auth/login state machine independently. Mount `jeswr-login-panel`

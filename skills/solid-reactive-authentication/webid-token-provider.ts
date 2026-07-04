@@ -33,6 +33,9 @@
  * a deterministic repro recipe. Pin ALL oauth4webapi call sites through ONE
  * chokepoint (`#httpOptions`), never per-call — a per-call pin is exactly how
  * this bug hides (one call pinned, a sibling call added later is not).
+ * Root-caused fixing exactly this stall in the AccessRadar app
+ * (`jeswr/product`, branch `fix/login-stall-8575`, commit `7a5461a` —
+ * bead `suite-tracker-8575`).
  *
  * ILLUSTRATIVE ONLY — this file is reference/reading material for the
  * internals, not a library to depend on. Apps should import a shared,
