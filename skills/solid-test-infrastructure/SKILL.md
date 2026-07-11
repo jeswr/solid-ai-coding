@@ -219,6 +219,55 @@ Fix, in order of preference:
 `typeof` guard passed and `/` prerendered fine on Node 24, then 500'd on Node 25.1 with the exact
 same source.)
 
+## jsdom + Radix UI — `fireEvent.pointerDown` never opens a dropdown
+
+Radix UI menu triggers (DropdownMenu and friends — the menus shadcn wraps) open from a
+`pointerdown` event whose `button === 0`. jsdom **before v27** has no `PointerEvent`
+constructor (check `typeof window.PointerEvent`), so there Testing Library's
+`fireEvent.pointerDown` falls back to constructing a generic `Event` and the `MouseEvent`-init
+fields (`button`, `ctrlKey`, …) are silently dropped — `event.button` is `undefined`, Radix's
+`button === 0` trigger check fails, and the menu never opens. No error, no warning: the same
+component works in a real browser, but under vitest/jsdom the menu content simply never appears
+in the document. (jsdom ≥27 implements `PointerEvent`, so upgrading removes the fallback path —
+the workaround below is for environments pinned to an older jsdom.)
+
+Fix: construct the `MouseEvent` yourself with `type: "pointerdown"` — jsdom implements
+`MouseEvent` fully and it carries `button: 0` by default — and dispatch it **through
+`fireEvent(element, event)`** so Testing Library still wraps the dispatch in React's `act()`
+(a raw `element.dispatchEvent(...)` skips that and can leave you asserting before the
+resulting state updates settle, with act warnings):
+
+```ts
+// fireEvent.pointerDown(trigger);  // ✗ generic Event in jsdom — button undefined, no open
+fireEvent(trigger, new MouseEvent("pointerdown", { bubbles: true })); // ✓ button: 0 — opens
+```
+
+Verified on dropdown menus. Radix **Select** triggers additionally check
+`event.pointerType === "mouse"`, which a bare `MouseEvent` also lacks — if a Select still won't
+open, attach the field to the constructed event first:
+
+```ts
+fireEvent(
+  trigger,
+  Object.assign(new MouseEvent("pointerdown", { bubbles: true }), { pointerType: "mouse" }),
+);
+```
+
+Select also calls the element pointer-capture APIs, which pre-27 jsdom doesn't implement
+either — stub them once in the vitest setup file or the Select tests still throw / stay shut:
+
+```ts
+if (!Element.prototype.hasPointerCapture) {
+  Element.prototype.hasPointerCapture = () => false;
+  Element.prototype.setPointerCapture = () => {};
+  Element.prototype.releasePointerCapture = () => {};
+}
+```
+
+(Learned writing component tests for the suite apps' shadcn/Radix dropdown menus, 2026-07 —
+bead suite-tracker-z7cc. The tell: a dropdown that opens fine in the browser but whose items
+are unreachable in jsdom tests.)
+
 ## Clearing a Dependabot backlog in a fork — range-scoped pnpm overrides
 
 When syncing an OSS app fork with its upstream, **merging upstream does not clear your
@@ -254,4 +303,5 @@ the regenerated lockfile.)
 | ETag from CSS | Present and stable — exercise the conditional-PUT (`If-Match`/`412`) path in tests; legacy NSS lacks it (see `solid-server-matrix`) |
 | PGlite boot cost | `new PGlite()` per test is ~1 s × N tests; boot once per vitest worker + reset schema between tests instead (see section above) |
 | Node 25.1 `localStorage` | `globalThis.localStorage` exists but throws on call unless `--localstorage-file` is set — a `typeof localStorage !== "undefined"` guard passes and then fails at call time, breaking SSR/prerender. Build on Node ≤24 or feature-detect by calling (see section above) |
+| Radix dropdowns won't open in jsdom | jsdom <27 lacks `PointerEvent` (upgrade if you can), so `fireEvent.pointerDown` falls back to a generic `Event` whose `button` init is dropped — Radix triggers require `button === 0`, so the menu silently never opens. Use `fireEvent(trigger, new MouseEvent("pointerdown", { bubbles: true }))` — the `MouseEvent` carries `button: 0`, and the `fireEvent(el, event)` form keeps the `act()` wrapping. Radix Select additionally checks `pointerType === "mouse"` (`Object.assign` it onto the event) and calls the pointer-capture APIs — stub `Element.prototype.{has,set,release}PointerCapture` in the test setup (see section above) |
 | Dependabot survives an upstream merge | Merging a fork's upstream does NOT clear Dependabot alerts (upstream ships the same vulnerable transitives) — clear them with range-scoped `pnpm-workspace.yaml` overrides, verified per alert (see section above) |

@@ -1,5 +1,25 @@
 # Changelog
 
+## [Unreleased] - 2026-07-11
+
+### Added
+
+- **`solid-test-infrastructure` — jsdom + Radix UI: `fireEvent.pointerDown` never opens a
+  dropdown.** Radix menu triggers (DropdownMenu — the menus shadcn wraps) open from a
+  `pointerdown` with `button === 0`; jsdom before v27 has no `PointerEvent` constructor
+  (upgrading jsdom is the first-choice fix), so there Testing
+  Library's `fireEvent.pointerDown` falls back to a generic `Event` whose `button` init is
+  dropped, the trigger check fails, and the menu silently never opens (works fine in a real
+  browser). Fix: `fireEvent(trigger, new MouseEvent("pointerdown", { bubbles: true }))` — jsdom
+  implements `MouseEvent` fully (it carries `button: 0` by default), and the
+  `fireEvent(el, event)` form keeps Testing Library's `act()` wrapping, which a raw
+  `dispatchEvent` would bypass. Radix Select additionally checks `pointerType === "mouse"`
+  (`Object.assign` it onto the constructed event) and calls the pointer-capture APIs pre-27
+  jsdom also lacks — stub `Element.prototype.{has,set,release}PointerCapture` in the test
+  setup. New section + a Gotchas row.
+  (Learned writing suite-app component tests against shadcn/Radix dropdowns, 2026-07 —
+  bead suite-tracker-z7cc.)
+
 ## [Unreleased] - 2026-07-04
 
 ### Added
