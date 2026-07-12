@@ -1,3 +1,5 @@
+> **Deprecated.** Agent Skills have moved to [jeswr/solid-sdk](https://github.com/jeswr/solid-sdk): package-specific skills now live beside their package at packages/<name>/SKILL.md, and cross-cutting skills at skills/<name>/SKILL.md. This repository is read-only and no longer the source of truth — new installs and pinned consumers must use jeswr/solid-sdk.
+
 # solid-ai-coding
 
 An opinionated guide that makes AI coding agents — **Claude Code**, **OpenAI Codex**,
